@@ -1,4 +1,4 @@
-# Proyecto final — equipo N
+# Proyecto final — equipo C 
 
 > Plantilla del módulo de análisis de células individuales, LCG 2027-1.
 > **Cambia esta línea y el título por los de tu equipo.** Todo lo demás está
@@ -15,8 +15,8 @@ bonito, sino que corra en otra máquina sin intervención manual.
 
 | Nombre | Qué hizo |
 |---|---|
-| | |
-| | |
+| Mónica Reyes Ramírez| |
+| Natalie B. Pineda Morán | |
 
 Esta tabla no es burocracia: el criterio B de la rúbrica es una respuesta
 individual dirigida, y saber quién trabajó en qué parte es lo que la hace justa.
