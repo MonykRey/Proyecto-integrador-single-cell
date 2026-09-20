@@ -1,0 +1,26 @@
+# Datos: nunca entran al repositorio.
+# Un objeto de células individuales pesa cientos de MB y GitHub rechaza
+# archivos de más de 100 MB. Además, los datos del proyecto son de uso interno.
+datos/*
+!datos/.gitkeep
+*.h5ad
+*.rds
+*.RDS
+*.mtx
+*.loom
+
+# Salida del render: se regenera con `quarto render`, no se versiona.
+figuras/*
+!figuras/.gitkeep
+reporte.html
+reporte_files/
+/.quarto/
+*_cache/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+
+# Sistema
+.DS_Store

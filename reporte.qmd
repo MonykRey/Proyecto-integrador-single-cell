@@ -1,0 +1,156 @@
+---
+title: "Análisis de células individuales — equipo C"
+subtitle: "Proyecto final · Bioinformática y Estadística 3 · LCG 2027-1"
+author: "Natalie Pineda Moran, Mónica Reyes Ramírez"
+date: today
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    code-tools: true
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+# El motor se declara explícitamente para que el render no dependa del orden
+# de los bloques: Quarto lo deduce del primero, y si abre con {bash} busca un
+# kernel de Jupyter que el entorno del módulo no instala.
+jupyter: python3
+---
+
+## Antes de empezar
+
+::: {.callout-important}
+## Este reporte tiene que correr desde cero
+
+El criterio A2 de la rúbrica —30 % de la nota del equipo— es que otra persona
+pueda clonar el repositorio y correr `quarto render` sin intervención manual.
+Compruébalo **antes de entregar**, y compruébalo en una sesión limpia de R: un
+objeto que quedó en tu memoria de trabajo no existe para quien evalúa.
+:::
+
+### Rutas
+
+Todas las rutas de datos se declaran aquí y en ningún otro lugar del reporte. Si
+tu copia de los datos está en otro sitio, cambia solo este bloque.
+
+```{r}
+#| label: rutas
+RUTA_DATOS <- ""      # <- el objeto que se le asignó a tu equipo
+```
+
+### Semilla
+
+```{r}
+#| label: semilla
+# Sin esto, cada render da un resultado distinto y el reporte deja de ser
+# reproducible. Varios métodos del módulo son de permutaciones o de
+# inicialización aleatoria: emptyDrops, scrublet, scDblFinder, UMAP.
+set.seed(20260903)
+```
+
+### Paquetes
+
+```{r}
+#| label: paquetes
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(scuttle)
+  library(scater)
+  library(scran)
+  # Añade aquí lo que uses. Si no está en envs/renv.lock del curso,
+  # no va a existir en el cluster: comprueba antes de depender de ello.
+})
+```
+
+## 1. De dónde vienen estos datos
+
+::: {.callout-note}
+## Las cuatro preguntas obligatorias
+
+Antes de tocar nada, contesta las cuatro de la sesión 04. Son las mismas para
+cualquier conjunto de datos que te llegue en la vida profesional.
+:::
+
+**¿Cuántos genes y cuántas células?**
+
+**¿Son cuentas crudas o ya están normalizadas?**
+
+**¿Qué información de lote o de condición trae?**
+
+**¿Es la matriz `raw` o la `filtered`?** — de esto depende qué pasos de control de
+calidad puedes hacer.
+
+```{r}
+#| label: importar
+#| eval: false
+sce <- readRDS(RUTA_DATOS)
+sce
+```
+
+## 2. Control de calidad
+
+Documenta **qué umbral usaste y por qué**. Un umbral copiado de un tutorial sin
+mirar la distribución de estos datos es exactamente lo que el criterio A1 (35 %)
+penaliza.
+
+```{r}
+#| label: qc
+#| eval: false
+```
+
+## 3. Normalización y selección de genes
+
+```{r}
+#| label: normalizacion
+#| eval: false
+```
+
+## 4. Reducción de dimensionalidad y agrupamiento
+
+```{r}
+#| label: reduccion
+#| eval: false
+```
+
+## 5. Lo que encontraron
+
+Aquí va la interpretación biológica, no la descripción de lo que hizo el código.
+
+## Tabla de decisiones
+
+**Criterio A3 de la rúbrica, 15 %.** Llénala sobre la marcha, no al final: la
+columna que más pesa es la tercera, y reconstruirla de memoria produce
+justificaciones vacías.
+
+| Decisión | Valor elegido | Por qué | Qué se probó antes |
+|---|---|---|---|
+| Umbral de cuentas mínimas | | | |
+| Umbral de genes detectados | | | |
+| Fracción mitocondrial máxima | | | |
+| Número de componentes principales | | | |
+| Resolución de agrupamiento | | | |
+
+## Lo que no funcionó
+
+Un apartado corto y honesto. Qué intentaron que no salió, y qué aprendieron de
+ello. No resta puntos: un proyecto sin callejones sin salida normalmente es un
+proyecto que no exploró.
+
+## Registro de sesión
+
+```{r}
+#| label: sesion
+sessionInfo()
+```
+
+::: {.callout-tip}
+## Por qué este bloque no se borra
+
+`sessionInfo()` es lo que permite que dentro de un año alguien sepa con qué
+versiones corrió esto. Es la diferencia entre un análisis reproducible y uno que
+funcionaba en la máquina de quien lo escribió.
+:::
