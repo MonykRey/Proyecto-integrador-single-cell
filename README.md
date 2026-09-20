@@ -14,8 +14,6 @@ bonito, sino que corra en otra máquina sin intervención manual.
 | Mónica Reyes Ramírez| |
 | Natalie B. Pineda Morán | |
 
-Esta tabla no es burocracia: el criterio B de la rúbrica es una respuesta
-individual dirigida, y saber quién trabajó en qué parte es lo que la hace justa.
 
 ## Cómo reproducir este análisis
 
