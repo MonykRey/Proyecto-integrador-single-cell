@@ -1,9 +1,5 @@
 # Proyecto final — equipo C 
 
-> Plantilla del módulo de análisis de células individuales, LCG 2027-1.
-> **Cambia esta línea y el título por los de tu equipo.** Todo lo demás está
-> pensado para que lo edites, no para que lo borres.
-
 ## Qué es este repositorio
 
 El análisis del conjunto de datos que se le asignó a tu equipo, de principio a
