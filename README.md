@@ -23,6 +23,14 @@ cd <el-repositorio>
 quarto render reporte.qmd
 ```
 
+Para reproducir este análisis se debe ***crear un archivo .venv***
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Mac/Linux
+.venv\Scripts\activate           # Windows
+pip install -r requirements.txt
+```
+
 **Los datos no están en el repositorio** y no deben estarlo: `.gitignore` los
 excluye. Declara aquí de dónde salen.
 
