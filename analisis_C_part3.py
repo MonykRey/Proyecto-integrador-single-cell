@@ -1,5 +1,5 @@
 # %% Rutas (único lugar donde se declaran)
-RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
+RUTA_DATOS = "data/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
 
 # %% Semilla y paquetes
 # --- Librerías estándar ---
@@ -452,3 +452,96 @@ print(f"Mitocondriales en HVG: {int((hvg & adata_f.var['mt']).sum())} de {int(hv
 
 # Top 20 HVG por ranking
 print(v.loc[v["highly_variable"], ["highly_variable_rank", "variances_norm"]].head(20).round(2).to_string())
+
+# %% 15. PCA sobre los HVG
+# Se trabaja sobre una COPIA: scale() modifica X y adata_f debe quedar log-normalizado.
+from sklearn.metrics import adjusted_rand_score, silhouette_score
+
+adata_pca = adata_hvg.copy()
+sc.pp.scale(adata_pca, max_value=10)
+sc.pp.pca(adata_pca, n_comps=50, random_state=SEMILLA)
+
+vr = adata_pca.uns["pca"]["variance_ratio"]
+tabla_pca = pd.DataFrame({"PC": np.arange(1, 51), "varianza": vr, "acumulada": np.cumsum(vr)})
+print(tabla_pca.iloc[[4, 9, 14, 19, 29, 39, 49]].round(4).to_string(index=False))
+
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.plot(np.arange(1, 51), vr, "o-", ms=3)
+ax.set(yscale="log", xlabel="Componente principal", ylabel="Fracción de varianza",
+       title="Codo del PCA")
+guardar(fig, "10_pca_codo")
+
+# %% 16. ¿Algún PC refleja técnica y no biología? (criterio de la sesión 02)
+for cov in ["total_counts", "pct_counts_mt", "doublet_score"]:
+    r = [np.corrcoef(adata_pca.obsm["X_pca"][:, i], adata_pca.obs[cov])[0, 1] for i in range(10)]
+    print(f"{cov:15s} correlación con PC1-PC10:", np.round(r, 2))
+
+# %% 17. Vecinos + Leiden: sensibilidad a PCs y resolución
+def agrupar(a, n_pcs, n_vecinos, resolucion, clave):
+    sc.pp.neighbors(a, n_neighbors=n_vecinos, n_pcs=n_pcs, random_state=SEMILLA)
+    sc.tl.leiden(a, resolution=resolucion, key_added=clave, random_state=SEMILLA,
+                 flavor="igraph", n_iterations=2, directed=False)
+    return a.obs[clave].copy()
+
+# Valores PROVISIONALES: se confirman con el codo y las tablas de abajo.
+N_PCS, N_VECINOS, RESOLUCION = 20, 15, 0.5
+
+ref = agrupar(adata_pca, N_PCS, N_VECINOS, RESOLUCION, "ref")
+filas = []
+for n in [10, 15, 20, 30, 40]:
+    e = agrupar(adata_pca, n, N_VECINOS, RESOLUCION, f"pcs_{n}")
+    filas.append({"n_pcs": n, "n_grupos": e.nunique(),
+                  "ARI_vs_referencia": round(adjusted_rand_score(ref, e), 3)})
+print(pd.DataFrame(filas).to_string(index=False))
+
+filas = []
+for r in [0.2, 0.5, 0.8, 1.0, 1.5]:
+    e = agrupar(adata_pca, N_PCS, N_VECINOS, r, f"res_{r}")
+    filas.append({"resolucion": r, "n_grupos": e.nunique(),
+                  "grupo_mas_chico": int(e.value_counts().min()),
+                  "silueta": round(silhouette_score(adata_pca.obsm["X_pca"][:, :N_PCS], e), 3)})
+print(pd.DataFrame(filas).to_string(index=False))
+
+# %% 18. Agrupamiento final (con los valores elegidos) y UMAP
+# Se vuelve a calcular para que el grafo de vecinos corresponda a la elección final.
+adata_pca.obs["grupos"] = agrupar(adata_pca, N_PCS, N_VECINOS, RESOLUCION, "grupos")
+print(adata_pca.obs["grupos"].value_counts().sort_index().to_string())
+
+sc.tl.umap(adata_pca, random_state=SEMILLA)   # SOLO para visualizar, no para decidir grupos
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+for ax, col in zip(axes.ravel(), ["grupos", "total_counts", "pct_counts_mt", "doublet_score"]):
+    sc.pl.umap(adata_pca, color=col, ax=ax, show=False, title=col, s=10)
+plt.tight_layout()
+guardar(fig, "11_umap_grupos_y_covariables")
+
+print(adata_pca.obs.groupby("grupos", observed=True)
+      [["total_counts", "n_genes_by_counts", "pct_counts_mt", "doublet_score"]]
+      .median().round(2).to_string())
+
+# %% 19. Genes marcadores por grupo (para interpretar, sección 5 del reporte)
+adata_f.obs["grupos"] = adata_pca.obs["grupos"]
+sc.tl.rank_genes_groups(adata_f, "grupos", method="wilcoxon")
+print(pd.DataFrame(adata_f.uns["rank_genes_groups"]["names"]).head(5).to_string())
+
+# %% 20. Guardar el objeto con grupos y UMAP
+adata_pca.write("adata_clusters.h5ad")   # agrégalo al .gitignore (*.h5ad)
+
+# %% 21. Verificación: dobletes por grupo y marcadores canónicos
+print(pd.crosstab(adata_f.obs["grupos"], adata_f.obs["predicted_doublet"]).to_string())
+
+marcadores = {
+    "T / naive": ["CD3E", "IL7R", "LEF1", "CCR7"],
+    "CD8 / efectoras": ["CD8A", "CD8B", "CCL5", "GZMK"],
+    "MAIT": ["KLRB1", "SLC4A10"],
+    "NK": ["NKG7", "GNLY", "KLRF1"],
+    "B": ["MS4A1", "CD79A", "BANK1"],
+    "Mono clásicos": ["CD14", "LYZ", "S100A8", "VCAN"],
+    "Mono no clásicos": ["FCGR3A", "MS4A7", "LST1"],
+    "DC": ["FCER1A", "CLEC10A", "CD1C", "HLA-DRA"],
+    "Plaquetas": ["PPBP"],
+}
+marcadores = {k: [g for g in v if g in adata_f.var_names] for k, v in marcadores.items()}
+marcadores = {k: v for k, v in marcadores.items() if v}
+dp = sc.pl.dotplot(adata_f, marcadores, groupby="grupos", return_fig=True)
+dp.savefig("figuras/12_dotplot_marcadores.png", dpi=150, bbox_inches="tight")
