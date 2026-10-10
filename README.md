@@ -11,8 +11,8 @@ bonito, sino que corra en otra máquina sin intervención manual.
 
 | Nombre | Qué hizo |
 |---|---|
-| Mónica Reyes Ramírez| |
-| Natalie B. Pineda Morán | |
+| Mónica Reyes Ramírez| Control de calidad y Normalización/selección de genes  |
+| Natalie B. Pineda Morán | Preguntas iniciales y Reducción de dimensionalidad /agrupamiento |
 
 
 ## Cómo reproducir este análisis
