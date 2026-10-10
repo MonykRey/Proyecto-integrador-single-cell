@@ -1,5 +1,5 @@
 # %% Rutas (único lugar donde se declaran)
-RUTA_DATOS = "data/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
+RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
 
 # %% Semilla y paquetes
 # --- Librerías estándar ---
@@ -21,8 +21,10 @@ import numpy as np             # operaciones numéricas y arreglos
 import pandas as pd            # manejo de tablas (DataFrames)
 import matplotlib.pyplot as plt  # creación de gráficas (importar DESPUÉS de fijar el backend)
 
+
 # --- Análisis de scRNA-seq ---
 import scanpy as sc            # análisis de datos de célula única (QC, normalización, clustering, UMAP)
+import scrublet as scr          # detección de dobletes
 
 # --- Utilidades de sistema ---
 from pathlib import Path       # manejo de rutas de archivos de forma portable 
@@ -164,3 +166,188 @@ ax.set(xscale="log", yscale="log", xlabel="Cuentas totales (log)",
        ylabel="Genes detectados (log)")
 fig.colorbar(pts, label="% mitocondrial")
 guardar(fig, "04_cuentas_vs_genes")
+
+# %% 5. Umbral de cuentas: histograma con candidatos
+tc = adata.obs["total_counts"]
+candidatos = [200, 300, 400, 500]
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+axes[0].hist(np.log10(tc[tc > 0]), bins=120)
+axes[0].set(xlabel="log10(cuentas totales)", ylabel="barcodes", yscale="log",
+            title="Todos los barcodes con cuentas > 0")
+axes[1].hist(np.log10(tc[tc >= 100]), bins=120)
+axes[1].set(xlabel="log10(cuentas totales)", ylabel="barcodes",
+            title="Zoom: barcodes con >= 100 cuentas")
+for ax in axes:
+    for u in candidatos:
+        ax.axvline(np.log10(u), color="red", ls="--", lw=0.8)
+plt.tight_layout()
+guardar(fig, "05_hist_filtro_cuentas")
+
+# %% Qué pasa con cada candidato
+mt = adata.var["mt"].to_numpy()
+filas = []
+for u in candidatos:
+    m = (tc >= u).to_numpy()         # máscara en numpy, no Serie
+    sub = adata.X[m]                  # matriz dispersa solo de esos barcodes
+    filas.append({
+        "umbral_cuentas": u,
+        "barcodes": int(m.sum()),
+        "genes_detectados": int((np.asarray(sub.sum(axis=0)).ravel() > 0).sum()),
+        "genes_mt_detectados": int((adata.X[m][:, adata.var["mt"].to_numpy()].sum(axis=0) > 0).sum()),
+        "mediana_cuentas": float(np.median(tc.to_numpy()[m])),
+        "mediana_genes_detectados": float(np.median(adata.obs["n_genes_by_counts"].to_numpy()[m])),
+        "mediana_pct_mt": float(np.median(adata.obs["pct_counts_mt"].to_numpy()[m])),
+    })
+print(pd.DataFrame(filas).round(2).to_string(index=False))
+
+# %% 6. aplicar el filtro de cuentas (solo barcodes con cuentas >= 500)
+# aun no se filtran genes, solo barcodes
+
+umbral_filtro = 500
+cel = (adata.obs["total_counts"] >= umbral_filtro).to_numpy()  # máscara en numpy, no Serie
+adata = adata[cel].copy()  # se hace copia para no modificar el original
+print(f"Filtradas {cel.sum()} células con >= {umbral_filtro} cuentas")
+
+# %% 7. Umbrales de genes y %mt 
+def limites_mad (x, k):
+    """Devuelve los límites inferior y superior de x según k veces la MAD."""
+    mediana = np.median(x)
+    mad = np.median(np.abs(x - mediana))
+    return mediana - k * mad, mediana + k * mad
+
+obs = adata.obs
+metricas = {
+    "log1p_total_counts": np.log1p(obs["total_counts"]).to_numpy(),
+    "log1p_n_genes_by_counts": np.log1p(obs["n_genes_by_counts"]).to_numpy(),
+    "pct_counts_mt": obs["pct_counts_mt"].to_numpy(),
+}
+
+limites = []
+for nombre, x in metricas.items():
+    for k in [3,4,5]:
+        lo, hi = limites_mad(x, k)
+        fuera= int (((x < lo) | (x > hi)).sum())
+        limites.append({
+            "metrica": nombre,
+            "k": k,
+            "limite_inferior": lo,
+            "limite_superior": hi,
+            "barcodes_fuera": fuera,
+        })
+print(pd.DataFrame(limites).round(2).to_string(index=False))
+
+# %% graficas con limites candidatos (k = 3, 5)
+fig, axes = plt.subplots(1, 3, figsize=(13, 3.5))
+x_g = obs["n_genes_by_counts"].to_numpy()
+axes[0].hist(x_g, bins=60)
+axes[0].set(title="Genes detectados", xlabel="n_genes_by_counts", ylabel="barcodes")
+for k in [3, 5]:
+    lo, hi = limites_mad(x_g, k)
+    axes[0].axvline(lo, color="red", ls="--", lw=0.8)
+    axes[0].axvline(hi, color="red", ls="--", lw=0.8)
+x_mt = obs["pct_counts_mt"].to_numpy()
+axes[1].hist(x_mt, bins=60)
+axes[1].set(title="% mitocondrial", xlabel="pct_counts_mt", ylabel="barcodes")
+for k in [3, 5]:
+    lo, hi = limites_mad(x_mt, k)
+    axes[1].axvline(lo, color="red", ls="--", lw=0.8)
+    axes[1].axvline(hi, color="red", ls="--", lw=0.8)
+x_tc = obs["total_counts"].to_numpy()
+axes[2].hist(x_tc, bins=60)
+axes[2].set(title="Cuentas totales", xlabel="total_counts", ylabel="barcodes")
+for k in [3, 5]:
+    lo, hi = limites_mad(x_tc, k)
+    axes[2].axvline(lo, color="red", ls="--", lw=0.8)
+    axes[2].axvline(hi, color="red", ls="--", lw=0.8)
+plt.tight_layout()
+guardar(fig, "06_hist_qc_mad")
+
+# %% 8 que tan sensibles son los resultados a los umbrales de QC
+obs = adata.obs
+g = np.log1p(obs["n_genes_by_counts"].to_numpy())
+mt = obs["pct_counts_mt"].to_numpy()
+
+def lim(x, k):
+    med = np.median(x)
+    mad = np.median(np.abs(x - med))
+    return med - k * mad, med + k * mad
+
+limites_qc = []
+for k in [3, 4, 5]:
+    g_lo, g_hi = lim(g, k)
+    mt_lo, mt_hi = lim(mt, k)
+    fuera = ((g < g_lo) | (g > g_hi) | (mt < mt_lo) | (mt > mt_hi)).sum()
+    limites_qc.append({
+        "k": k,
+        "barcodes_fuera": int(fuera),
+        "porcentaje_fuera": float(fuera / len(obs) * 100),
+    })
+print(pd.DataFrame(limites_qc).round(2).to_string(index=False))
+
+# %% 9 aplicar los filtros de calidad sobre adata (barcodes con >= 500 cuentas)
+obs = adata.obs
+g = np.log1p(obs["n_genes_by_counts"].to_numpy())
+mt = obs["pct_counts_mt"].to_numpy()
+
+g_min = lim(g, 4)[0]    # genes, inferior: k = 4
+g_max = lim(g, 5)[1]    # genes, superior: k = 5
+mt_max = lim(mt, 5)[1]  # % mt, superior: k = 5
+
+f_g_bajo, f_g_alto, f_mt_alto = (g < g_min), (g > g_max), (mt > mt_max)
+print(f"Genes: {np.expm1(g_min):.0f} a {np.expm1(g_max):.0f} | % mt máx: {mt_max:.2f}")
+print(f"Fuera por pocos genes: {f_g_bajo.sum()} | por muchos genes: {f_g_alto.sum()} | por % mt: {f_mt_alto.sum()}")
+
+mantener = ~(f_g_bajo | f_g_alto | f_mt_alto)
+print(f"Antes del filtro: {adata.n_obs} barcodes")
+adata_f = adata[mantener].copy()     # adata (4,088 barcodes) queda intacto
+print(f"Después del filtro: {adata_f.n_obs} barcodes ({100 * adata_f.n_obs / adata.n_obs:.1f} %)")
+
+# %% 10. filtrar genes: cuantos sobreviven con un mínimo de células
+n_cel_por_gen = np.asarray((adata_f.X > 0).sum(axis=0)).ravel()
+tabla_genes = pd.DataFrame({
+    "min_celulas": [1, 3, 5, 10, 20],
+    "genes_retenidos": [int((n_cel_por_gen >= m).sum()) for m in [1, 3, 5, 10, 20]],
+})
+tabla_genes["porcentaje_retenido"] = 100 * tabla_genes["genes_retenidos"]  / adata_f.n_vars
+tabla_genes["genes_eliminados"] = adata_f.n_vars - tabla_genes["genes_retenidos"]
+print(tabla_genes.to_string(index=False))
+
+# %% grafica para saber cuantas celuas dectadas por gen
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.hist(n_cel_por_gen, bins=60)
+ax.set(xlabel="Células detectadas por gen", ylabel="genes", yscale="log", title="Genes detectados en >= 1 célula")
+for m in [1 , 3, 5, 10, 20]:
+    ax.axvline(m, color="red", ls="--", lw=0.8)
+guardar(fig, "07_hist_genes_detectados")
+
+# %% 11. filtrar genes: mínimo de 3 células
+min_celulas = 3
+genes_a_mantener = (n_cel_por_gen >= min_celulas)
+print(f"Genes antes del filtro: {adata_f.n_vars}")
+adata_f = adata_f[:, genes_a_mantener].copy()
+print(f"Genes después del filtro: {adata_f.n_vars} ({100 * adata_f.n_vars / adata.n_vars:.1f} %)")  
+
+# %%12 deteccion de dobletes con scrublet
+# Un doblete es una gota que contiene dos células, lo que puede confundir el análisis. Scrublet estima la probabilidad de que cada célula sea un doblete.
+# esto lo hace con un modelo de simulación y comparación de perfiles de expresión. Se recomienda filtrar los dobletes antes de hacer análisis downstream.
+
+sc.pp.scrublet(adata_f, random_state=SEMILLA)
+
+print(f"Dobletes predichos: {adata_f.obs['predicted_doublet'].sum()} "
+      f"de {adata_f.n_obs} ({100 * adata_f.obs['predicted_doublet'].mean():.1f} %)")
+print(f"Umbral: {adata_f.uns['scrublet']['threshold']:.3f}")
+
+fig, ax = plt.subplots(figsize=(5, 3.5))
+ax.hist(adata_f.obs["doublet_score"], bins=60, log=True)
+ax.axvline(adata_f.uns["scrublet"]["threshold"], color="red", ls="--", lw=1)
+ax.set(xlabel="Puntaje de doblete", ylabel="barcodes (log)",
+       title="Scrublet (línea roja = umbral automático)")
+guardar(fig, "08_scrublet")
+
+# %% 12b. Decisión sobre dobletes
+# El histograma no muestra dos poblaciones separadas, así que el umbral automático
+# no es confiable. Se anotan los puntajes en adata_f.obs pero no se elimina ningún
+# barcode.
+print("Barcodes con puntaje > 0.366:", (adata_f.obs["doublet_score"] > 0.366).sum())
+print("Se conservan todos:", adata_f.n_obs, "barcodes")
