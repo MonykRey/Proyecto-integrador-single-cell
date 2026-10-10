@@ -132,7 +132,7 @@ justificaciones vacías.
 | Umbral de genes detectados | | | |
 | Fracción mitocondrial máxima | | | |
 | Número de componentes principales | | | |
-| Resolución de agrupamiento | | | |
+| Resolución de agrupamiento r| | | |
 
 ## Lo que no funcionó
 
