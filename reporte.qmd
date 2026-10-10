@@ -39,7 +39,7 @@ tu copia de los datos está en otro sitio, cambia solo este bloque.
 
 ```{python}
 #| label: rutas
-RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"      # <- el objeto que se le asignó a tu equipo
+RUTA_DATOS = "data/proyecto-equipo-C/"      # <- el objeto que se le asignó a tu equipo
 ```
 
 ### Semilla
@@ -99,15 +99,11 @@ cualquier conjunto de datos que te llegue en la vida profesional.
 
 La matriz de datos tiene 927,681 barcodes y 38,606 genes. 
 
-En este caso, los barcodes son todos los códigos que el pipeline reportó, pero no son necesariamente células. Un posterior análisis mostró que la mayoría de las gotas serían vacías.
+En este caso, los barcodes son todos los códigos que el pipeline reportó, pero no son necesariamente células. Un posterior análisis mostró que la mayoría de las gotas serían vacías (revisar la sección de QC)
 
-Los genes se identifican por símbolo y solo nos quedamos con nombres únicos utilizando `make_unique = True`. 
-
-A partir de estos datos, podemos decir que los primeros 3 genes que aparecen corresponden al cromosoma 01 y son datos humanos. 
+Los genes se identifican por símbolo y solo nos quedamos con nombres únicos utilizando `make_unique = True`, los nombres duplicados se renombran sin eliminar ningún gen. Los identificadores de gen comienzan con ENSG, esto indica que son de Ensembl humano y en este caso los primeros son del inicio del **chr1**
 ```{python}
 #| label: importar
-import scanpy as sc
-
 adata = sc.read_10x_mtx(RUTA_DATOS, var_names="gene_symbols",
                         make_unique=True, cache=False)
 
@@ -119,7 +115,9 @@ print("Primeros genes:   ", list(adata.var_names[:3]))
 
 **¿Son cuentas crudas o ya están normalizadas?**
 
-La matriz contiene cuentas crudas, todos los valores diferentes de cero son enteros y positivos, además está almacenada como una matriz dispersa. 
+La matriz contiene cuentas crudas, todos los valores diferentes de cero son enteros positivos (mínimo 1, máximo 10,104), sin decimales ni negativos; una matriz normalizada tendría valores decimales. Además, está almacenada como una matriz dispersa (`csc_matrix`).
+
+Por otro lado, recordar que el máximo de 10,104 es la mayor cuenta d eun gen en un solo barcode, no el total de una célula. 
 ```{python}
 #| label: cuentas-crudas
 X = adata.X
@@ -134,7 +132,9 @@ print(pd.Series({
 
 **¿Qué información de lote o de condición trae?**
 
+La tabla de información por barcode es `adata.obs`, en caso de que tuviera un lote, donante o condición, entonces aparecería como columnas. Sin embargo, una lista vacía significa que la matriz no trae ninguna información de ese tipo (no hay columna de ningún dato de condición, tratamiento, donante ni lote)
 
+Por otro lado, los barcodes terminan en `-1` y miden 16 nucleótidos, lo que es consistente con una sola librería de 10x. Por ello no es posible separar lotes ni condiciones con esos datos, y el QC se calcula de manera global. 
 ```{python}
 #| label: lote-condicion
 barcodes = pd.Series(adata.obs_names)
@@ -147,6 +147,10 @@ print("Longitud del barcode (sin sufijo):\n",
 
 **¿Es la matriz `raw` o la `filtered`?** — de esto depende qué pasos de control de
 calidad puedes hacer.
+
+La matriz es ***raw***. De los 927,681 barcodes, 138,352 tienen 0 cuentas y 923,439 tienen menos de 100; la mediana de cuentas por barcode es 1.
+
+La curva rando muestra una alrga meseta de barcodes con pocas cuentas (gotas vacías con RNA ambiental) y un codo cerca de 4,000 barcodes, donde empiezan las gotas con células. 
 
 ```{python}
 #| label: raw-o-filtered
