@@ -18,10 +18,50 @@ bonito, sino que corra en otra máquina sin intervención manual.
 ## Cómo reproducir este análisis
 
 ```bash
-git clone <la-url-de-este-repositorio>
-cd <el-repositorio>
-quarto render reporte.qmd
+git clone <url-del-repositorio>
+cd Proyecto-integrador-single-cell
 ```
+### Requisitos 
+- Visual Studio Code
+- Python 3.11
+- conda (recomendado) o pip
+
+### Datos
+- Descarga los datos del equipo C a tu computadora, define la ruta donde se va a guardar esa carpeta que debe contener los archivos **barcodes.tsv, genes.tsv y matrix.mtx.**
+- Luego de clonar el repositorio, abre el archivo `analisis_C.py` en Visual Studio Code y cambia la ruta (que se almacena en la variable RUTA_DATOS) a la ruta donde tienes los datos **barcodes.tsv, genes.tsv y matrix.mtx.**
+
+### Librerias necesarias para este análisis
+- numpy
+- pandas
+- matplotlib
+- scanpy
+- python-igraph
+- leidenalg
+- scikit-misc
+- scrublet
+
+### Comandos para instalar las librerías en un entorno (recomendable)
+**En tu terminal de linux/Mac**
+
+```bash
+conda create -n sc-equipoC python=3.11 -y
+conda activate sc-equipoC
+conda install -c conda-forge numpy pandas matplotlib scanpy python-igraph leidenalg scikit-misc jupyter ipykernel -y
+pip install scrublet
+```
+> Si `pip` no funciona, prueba con `pip3`.
+
+### Correr el análisis
+```bash
+conda activate sc-equipoC
+python analisis_C.py
+```
+
+### Salidas
+- Las figuras se guardan automáticamente en `figuras/` al terminar el script.
+- Los datos podrás visualizarlos en tu terminal de Visual Studio Code
+
+### Otras formas de poder tener las dependencias
 
 Para reproducir este análisis se debe ***crear un archivo .venv***
 ```bash
@@ -30,6 +70,7 @@ source .venv/bin/activate        # Mac/Linux
 .venv\Scripts\activate           # Windows
 pip install -r requirements.txt
 ```
+
 
 **Los datos no están en el repositorio** y no deben estarlo: `.gitignore` los
 excluye. Declara aquí de dónde salen.
