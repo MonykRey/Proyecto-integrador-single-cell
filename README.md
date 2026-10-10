@@ -51,7 +51,7 @@ pip install scrublet
 ```
 > Si `pip` no funciona, prueba con `pip3`.
 
-### Correr el análisis
+### Correr el análisis (esto es en tu terminal de Visual Studio Code)
 ```bash
 conda activate sc-equipoC
 python analisis_C.py
