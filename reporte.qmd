@@ -213,7 +213,7 @@ En lugar de fijar un número random, calculamos los límites a partir de la medi
 
 - Genes detectados (escala log1p): límite inferior con k = 4, así eliminamos barcodes con muy pocos genes, que pueden corresponder a gotas de baja calidad. Y superior con k = 5, esto elimina barcodes con demasiados genes, que pueden ser dobletes, aunque es un poco permisivo para no recortar células reales muy activas.
 
-- % mitocondrial: el límite superior con k = 5, 
+- % mitocondrial: Usamos solo un límite superior, calculado con la MAD y k = 5. Un % mitocondrial alto indica que la célula está dañada o muriend. Un % mitocondrial bajo, en cambio, no es un problema de calidad, así que no se puso límite inferior. Elegimos k = 5 porque con k = 3 o 4 el límite quedaba más cerca de la mediana y eliminaba más barcodes, entonces esto suponia un  riesgo de descartar células importantes para el análisis de esta forma k = 5 elimina solo los valores claramente atípicos.
 
 
 ```{python}
@@ -321,15 +321,58 @@ guardar(fig, "08_scrublet")
 ```
 
 
-
-
-
 ## 3. Normalización y selección de genes
 
-```{r}
+Las 3,749 células tenian tamaños de bibiloteca muy distintos (iban de 2,679 a 29,317 cuentas), lo que podía interpretarse como diferencias en la secuenciación y no precisamente en la biología de los datos. Por so escalamos cada célula a 10,000 cuentas totales y aplicamos log1o, que reduce el peso de los valores extremos. En este caso nos quedamos con un valor de 10, 000 por que era el que quedaba cerca de la mediana de nuestros datos, este valor tambien fue consultado en la bibliografía y parece ser un valor estandar, además de que no distorsiona las cuentas de la mayor parte de las células.
+
+
+```{python}
 #| label: normalizacion
-#| eval: false
+
+adata_f.layers["counts"] = adata_f.X.copy()  # se guarda la matriz original en una capa
+sc.pp.normalize_total(adata_f, target_sum=1e4)  # normaliza
+
+# Verificamos que la mediana de cuentas por célula sea 10,000
+tc = adata_f.obs["total_counts"].to_numpy()
+print(f"Después de normalizar: mediana de cuentas por célula = {np.median(tc):.0f}")
+
+# Verificacion, cada célula suma 1e4
+sumas_norm = np.asarray(adata_f.X.sum(axis=1)).ravel()
+print("Suma por célula tras normalize_total",
+      f"min={sumas_norm.min():.1f}, max={sumas_norm.max():.1f}, mediana={np.median(sumas_norm):.1f}")
+
+# aplicar el log1p (log(1+x)) para estabilizar la varianza y reducir el efecto de genes muy expresados
+sc.pp.log1p(adata_f)
+
 ```
+
+El máximp por célula paso de una media de 306 cuentas a 5.84 en escala log, así un gen por ejemplo dominante ya no pesa muchisimas veces más que el resto.
+
+### Selección de genes
+
+Para esta parte usamos seurat_v3 sobre las cuentas originales y nos quedamos con los 2,000 genes más variables, elegimos ese número por que es el que los datos respaldan, por ejemplo el gen en el lugar 2,00 todavia varía más de lo esperado al azar (varianza normalizadade 1.41) y la mediana de los HVG es de 1.78 frente al 0.92 del resto de los genes, además de que vimos que es un número estandar y al  probar valores de 1,000, 2,000 y 3,000; 2,000 resultaba ser el que aportaba más información. 
+
+
+```{python}
+#| label: selección de genes
+conjuntos = {}
+for n in [1000, 2000, 3000]:
+    tmp = sc.pp.highly_variable_genes(adata_f, flavor="seurat_v3", layer="counts",
+                                      n_top_genes=n, inplace=False)
+    conjuntos[n] = set(adata_f.var_names[tmp["highly_variable"].to_numpy()])
+
+print(pd.DataFrame({
+    "n_top_genes": list(conjuntos),
+    "genes": [len(s) for s in conjuntos.values()],
+    "compartidos_con_2000": [len(s & conjuntos[2000]) for s in conjuntos.values()],
+}).to_string(index=False))
+
+# Selección final: 2000 HVG, marcados en adata_f.var sin eliminar genes
+sc.pp.highly_variable_genes(adata_f, flavor="seurat_v3", layer="counts", n_top_genes=2000)
+print(f"HVG: {int(adata_f.var['highly_variable'].sum())} de {adata_f.n_vars} genes")
+
+```
+
 
 ## 4. Reducción de dimensionalidad y agrupamiento
 
