@@ -351,3 +351,104 @@ guardar(fig, "08_scrublet")
 # barcode.
 print("Barcodes con puntaje > 0.366:", (adata_f.obs["doublet_score"] > 0.366).sum())
 print("Se conservan todos:", adata_f.n_obs, "barcodes")
+
+#%% 13. antes de normalizar, se guarda el objeto filtrado   
+adata_f.write("adata_f_filtered.h5ad")  # contiene barcodes y genes filtrados, sin normalizar ni log1p
+
+# %% 14. tamaño de biblioteca - paso antes de normalización
+tc = adata_f.obs["total_counts"].to_numpy()
+print(f"Antes de normalizar: mediana de cuentas por célula = {np.median(tc):.0f}")
+print(pd.Series({
+    "minimo": tc.min(),
+    "maximo": tc.max(),
+    "maximo": tc.max(),
+    "mediana": np.median(tc),
+    "media": np.mean(tc),
+    "desviacion": np.std(tc),
+    "p5": np.percentile(tc, 5),
+    "p25": np.percentile(tc, 25),
+    "p75": np.percentile(tc, 75),
+    "p95": np.percentile(tc, 95),
+    "razon p95/p5": np.percentile(tc, 95) / np.percentile(tc, 5),
+}).round(2).to_string())
+
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.hist(tc, bins=60)  
+ax.set(xlabel="Cuentas totales por célula", ylabel="barcodes", title="Tamaño de biblioteca")
+guardar(fig, "09_hist_tamano_biblioteca")
+
+# %% 13b. Normalizacion por tamaño de biblioteca y log1p
+# Se normaliza cada célula a 10,000 cuentas y luego se aplica log1p. Esto hace que los datos sean comparables entre células y reduce la influencia de genes muy expresados. 
+
+adata_f.layers["counts"] = adata_f.X.copy()  # se guarda la matriz original en una capa
+sc.pp.normalize_total(adata_f, target_sum=1e4)  # normaliza
+
+# Verificamos que la mediana de cuentas por célula sea 10,000
+tc = adata_f.obs["total_counts"].to_numpy()
+print(f"Después de normalizar: mediana de cuentas por célula = {np.median(tc):.0f}")
+
+# Verificacion, cada célula suma 1e4
+sumas_norm = np.asarray(adata_f.X.sum(axis=1)).ravel()
+print("Suma por célula tras normalize_total",
+      f"min={sumas_norm.min():.1f}, max={sumas_norm.max():.1f}, mediana={np.median(sumas_norm):.1f}")
+
+# aplicar el log1p (log(1+x)) para estabilizar la varianza y reducir el efecto de genes muy expresados
+sc.pp.log1p(adata_f)
+
+# Verificacion tras el log 
+sumas_log = np.asarray(adata_f.X.expm1().sum(axis=1)).ravel()
+print("Tras log1p y expm1:", f"min={sumas_log.min():.1f}, max={sumas_log.max():.1f}")
+
+# Verificacion para comprobar si la correlacion entre cuentas totales y genes detectados no cambia
+# lo que queremos es cambiar la escala
+x_antes = np.asarray(adata_f.layers["counts"].max(axis=1).todense()).ravel()
+x_desp = np.asarray(adata_f.X.max(axis=1).todense()).ravel()
+print(pd.DataFrame({"max_por_celula_crudo": x_antes,
+                    "max_por_celula_log": x_desp}).describe().round(2).to_string())
+
+
+# Guardar la matriz normalizada y log1p en un archivo h5ad para análisis posteriores
+adata_f.write("adata_f_normalized.h5ad")  # contiene barcodes y genes filtrados, normalizados y log1p
+adata_f.raw = adata_f  # se guarda la versión normalizada y log1p en .raw para análisis posteriores
+
+# %% 14. Selección de genes altamente variables (HVG)
+# seurat_v3 ajusta la relación media-varianza sobre cuentas crudas (layer="counts")
+# y rankea los genes por varianza normalizada
+
+# Sensibilidad al número de genes
+conjuntos = {}
+for n in [1000, 2000, 3000]:
+    tmp = sc.pp.highly_variable_genes(adata_f, flavor="seurat_v3", layer="counts",
+                                      n_top_genes=n, inplace=False)
+    conjuntos[n] = set(adata_f.var_names[tmp["highly_variable"].to_numpy()])
+
+print(pd.DataFrame({
+    "n_top_genes": list(conjuntos),
+    "genes": [len(s) for s in conjuntos.values()],
+    "compartidos_con_2000": [len(s & conjuntos[2000]) for s in conjuntos.values()],
+}).to_string(index=False))
+
+# Selección final: 2000 HVG, marcados en adata_f.var sin eliminar genes
+sc.pp.highly_variable_genes(adata_f, flavor="seurat_v3", layer="counts", n_top_genes=2000)
+print(f"HVG: {int(adata_f.var['highly_variable'].sum())} de {adata_f.n_vars} genes")
+
+adata_hvg = adata_f[:, adata_f.var["highly_variable"]].copy()
+print(adata_hvg)
+
+# %% 14b. Evidencia para la decisión de HVG
+v = adata_f.var.sort_values("highly_variable_rank")   # los no-HVG (rank NaN) quedan al final
+corte = v.loc[v["highly_variable"], "variances_norm"].min()
+print(f"Varianza normalizada mínima en el corte (rank 2000): {corte:.2f}")
+print("Mediana de variances_norm, HVG vs resto:",
+      round(v.loc[v["highly_variable"], "variances_norm"].median(), 2), "vs",
+      round(v.loc[~v["highly_variable"], "variances_norm"].median(), 2))
+
+# Genes que pueden ser técnicos dentro de los HVG: ribosomales y mitocondriales
+hvg = adata_f.var["highly_variable"]
+names = adata_f.var_names.str.upper()
+ribo = names.str.startswith("RPS") | names.str.startswith("RPL")
+print(f"Ribosomales en HVG: {int((hvg & ribo).sum())} de {int(hvg.sum())} ({100 * (hvg & ribo).sum() / hvg.sum():.1f} %)")
+print(f"Mitocondriales en HVG: {int((hvg & adata_f.var['mt']).sum())} de {int(hvg.sum())} ({100 * (hvg & adata_f.var['mt']).sum() / hvg.sum():.1f} %)")
+
+# Top 20 HVG por ranking
+print(v.loc[v["highly_variable"], ["highly_variable_rank", "variances_norm"]].head(20).round(2).to_string())
