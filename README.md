@@ -55,4 +55,4 @@ rúbrica** (15 %), y llenarla al final, de memoria, se nota.
 
 | Fecha | Decisión | Por qué | Qué se probó antes |
 |---|---|---|---|
-| | | | |
+| 09 / 10 / 2026 | Umbral de cuentas mínimas | Hay un valle entre gotas vacías y células en el histograma, consistente con el acantilado de la curva de rango (~4000) | se probaron valores de 200,300, 400, 500, 1000, 2000, 5000, los resultados se mantienen estables de 200 a 2000 y 5000 recorta el pico de células |
