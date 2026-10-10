@@ -1,10 +1,10 @@
 # %% Rutas (único lugar donde se declaran)
-RUTA_DATOS = "data/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
+RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
 
 # %% Semilla y paquetes
 # --- Librerías estándar ---
 import random                  # generación de números aleatorios (útil para fijar semillas)
-
+import sys, platform, os        # utilidades de sistema (rutas, entorno, etc.)
 # --- Configuración del backend de matplotlib ---
 import matplotlib
 try:
@@ -545,3 +545,19 @@ marcadores = {k: [g for g in v if g in adata_f.var_names] for k, v in marcadores
 marcadores = {k: v for k, v in marcadores.items() if v}
 dp = sc.pl.dotplot(adata_f, marcadores, groupby="grupos", return_fig=True)
 dp.savefig("figuras/12_dotplot_marcadores.png", dpi=150, bbox_inches="tight")
+
+# %% 22. Guardar el registro de la sesión (para reproducibilidad)
+print("Registro de sesión")
+print("Python:", sys.version)
+print("Sistema:", platform.platform())
+print("Semilla:", SEMILLA)
+print()
+sc.logging.print_header()
+
+# Paquetes que usa el script y que print_header no siempre incluye - esto es como más o menos el check reproducibility de R
+from importlib.metadata import version
+for paquete in ["scrublet", "matplotlib", "scikit-misc"]:
+    try:
+        print(f"{paquete}=={version(paquete)}")
+    except Exception:
+        print(f"{paquete}: no instalado")

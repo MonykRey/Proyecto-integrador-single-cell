@@ -37,33 +37,53 @@ objeto que quedó en tu memoria de trabajo no existe para quien evalúa.
 Todas las rutas de datos se declaran aquí y en ningún otro lugar del reporte. Si
 tu copia de los datos está en otro sitio, cambia solo este bloque.
 
-```{r}
+```{python}
 #| label: rutas
-RUTA_DATOS <- ""      # <- el objeto que se le asignó a tu equipo
+RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"      # <- el objeto que se le asignó a tu equipo
 ```
 
 ### Semilla
 
-```{r}
+```{python}
 #| label: semilla
 # Sin esto, cada render da un resultado distinto y el reporte deja de ser
 # reproducible. Varios métodos del módulo son de permutaciones o de
 # inicialización aleatoria: emptyDrops, scrublet, scDblFinder, UMAP.
-set.seed(20260903)
+import random
+import numpy as np
+
+SEMILLA = 20260903
+random.seed(SEMILLA)
+np.random.seed(SEMILLA)
 ```
 
 ### Paquetes
 
-```{r}
+```{python}
 #| label: paquetes
-suppressPackageStartupMessages({
-  library(SingleCellExperiment)
-  library(scuttle)
-  library(scater)
-  library(scran)
-  # Añade aquí lo que uses. Si no está en envs/renv.lock del curso,
-  # no va a existir en el cluster: comprueba antes de depender de ello.
-})
+#$ --- Librerías estándar ---
+
+import random                  # generación de números aleatorios (útil para fijar semillas)
+import sys, platform, os        # utilidades de sistema (rutas, entorno, etc.)
+
+# --- Configuración del backend de matplotlib ---
+import matplotlib
+
+# --- Librerías de análisis de datos ---
+import numpy as np             # operaciones numéricas y arreglos
+import pandas as pd            # manejo de tablas (DataFrames)
+import matplotlib.pyplot as plt  # creación de gráficas (importar DESPUÉS de fijar el backend)
+
+
+# --- Análisis de scRNA-seq ---
+import scanpy as sc            # análisis de datos de célula única (QC, normalización, clustering, UMAP)
+import scrublet as scr          # detección de dobletes
+
+# --- Utilidades de sistema ---
+from pathlib import Path       # manejo de rutas de archivos de forma portable 
+
+# Añade aquí lo que uses. Si no está en envs/renv.lock del curso,
+# no va a existir en el cluster: comprueba antes de depender de ello.
 ```
 
 ## 1. De dónde vienen estos datos
@@ -77,30 +97,228 @@ cualquier conjunto de datos que te llegue en la vida profesional.
 
 **¿Cuántos genes y cuántas células?**
 
+La matriz de datos tiene 927,681 barcodes y 38,606 genes. 
+
+En este caso, los barcodes son todos los códigos que el pipeline reportó, pero no son necesariamente células. Un posterior análisis mostró que la mayoría de las gotas serían vacías.
+
+Los genes se identifican por símbolo y solo nos quedamos con nombres únicos utilizando `make_unique = True`. 
+
+A partir de estos datos, podemos decir que los primeros 3 genes que aparecen corresponden al cromosoma 01 y son datos humanos. 
+```{python}
+#| label: importar
+import scanpy as sc
+
+adata = sc.read_10x_mtx(RUTA_DATOS, var_names="gene_symbols",
+                        make_unique=True, cache=False)
+
+n_celulas, n_genes = adata.shape
+print(f"{n_celulas:,} barcodes (filas) x {n_genes:,} genes (columnas)")
+print("Primeros barcodes:", list(adata.obs_names[:3]))
+print("Primeros genes:   ", list(adata.var_names[:3]))
+```
+
 **¿Son cuentas crudas o ya están normalizadas?**
 
+La matriz contiene cuentas crudas, todos los valores diferentes de cero son enteros y positivos, además está almacenada como una matriz dispersa. 
+```{python}
+#| label: cuentas-crudas
+X = adata.X
+print(pd.Series({
+    "tipo_de_matriz": type(X).__name__,
+    "minimo_no_cero": X.data.min(),
+    "maximo": X.data.max(),
+    "hay_decimales": bool(np.any(X.data % 1 != 0)),
+    "hay_negativos": bool(np.any(X.data < 0)),
+}, dtype=object).to_string())
+```
+
 **¿Qué información de lote o de condición trae?**
+
+
+```{python}
+#| label: lote-condicion
+barcodes = pd.Series(adata.obs_names)
+print("Columnas de obs:", list(adata.obs.columns))
+print("Sufijos:\n", barcodes.str.split("-").str[-1].value_counts().to_string())
+print("Longitud del barcode (sin sufijo):\n",
+      barcodes.str.split("-").str[0].str.len().value_counts().to_string())
+```
+
 
 **¿Es la matriz `raw` o la `filtered`?** — de esto depende qué pasos de control de
 calidad puedes hacer.
 
-```{r}
-#| label: importar
-#| eval: false
-sce <- readRDS(RUTA_DATOS)
-sce
+```{python}
+#| label: raw-o-filtered
+X = adata.X
+totales = np.asarray(X.sum(axis=1)).ravel()
+print(pd.Series({
+    "barcodes": len(totales),
+    "con_0_cuentas": int((totales == 0).sum()),
+    "con_menos_de_100_cuentas": int((totales < 100).sum()),
+    "mediana_cuentas": float(np.median(totales)),
+}, dtype=object).to_string())
+
+rango = np.sort(totales)[::-1]
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.loglog(np.arange(1, len(rango) + 1), np.maximum(rango, 1))
+ax.set(xlabel="Rango del barcode (log)", ylabel="Cuentas totales (log)",
+       title="Curva de rango de barcodes")
+plt.show()
 ```
 
 ## 2. Control de calidad
 
-Documenta **qué umbral usaste y por qué**. Un umbral copiado de un tutorial sin
-mirar la distribución de estos datos es exactamente lo que el criterio A1 (35 %)
-penaliza.
+Los datos llegaron como una matriz con 38,606 genes y 928,681 barcodes, donde casí todos los barcodes son gotas vacías. Entoces por esta razón el control de calidad se hizo en tres pasos, aquí no intentamos definir un umbral basandonos en la literatura, sino que lo que queriamos era siempre ver la distribución de los datos antes de fijar un umbral. 
 
-```{r}
-#| label: qc
-#| eval: false
+### Umbral de cuentas totales.
+
+Lo que hicimos en esta parte fue hacer un histograma de cuentas totales (escala log) donde provamos cuatro valores candidatos (200, 300, 400 y 500), comparamos que pasaba con cada uno, es decir, cuántos barcodes quedaban, cuantos genes se detectaban y como cambiaban las medianas de cuentas, genes y % mitocondrial.
+
+```{python}
+#| label: Umbral de cuentas totales
+tc = adata.obs["total_counts"]
+candidatos = [200, 300, 400, 500]
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+axes[0].hist(np.log10(tc[tc > 0]), bins=120)
+axes[0].set(xlabel="log10(cuentas totales)", ylabel="barcodes", yscale="log",
+            title="Todos los barcodes con cuentas > 0")
+axes[1].hist(np.log10(tc[tc >= 100]), bins=120)
+axes[1].set(xlabel="log10(cuentas totales)", ylabel="barcodes",
+            title="Zoom: barcodes con >= 100 cuentas")
+for ax in axes:
+    for u in candidatos:
+        ax.axvline(np.log10(u), color="red", ls="--", lw=0.8)
+plt.tight_layout()
+guardar(fig, "05_hist_filtro_cuentas")
+
+umbral_filtro = 500
+cel = (adata.obs["total_counts"] >= umbral_filtro).to_numpy()  
+adata = adata[cel].copy()  # se hace copia para no modificar el original
+print(f"Filtradas {cel.sum()} células con >= {umbral_filtro} cuentas")
+
 ```
+
+Con esto elegimos 500 por que deja fuera la población de gotas vacías y con RNA ambiental y conserva la población de células de nuestro interes. Con este filtro nos quedaron 4,088 barcodes.
+
+
+### Genes detectados y % mitocondrial.
+
+En lugar de fijar un número random, calculamos los límites a partir de la mediana y la desviación absoluta mediana (MAD) de los datos, para que fuera más robusto a valores extremos. Evaluamos k = 3, 4 y 5, revisamos cuántos barcodes quedaban fuera en cada uno. Usamos los siguientes límites:
+
+- Genes detectados (escala log1p): límite inferior con k = 4, así eliminamos barcodes con muy pocos genes, que pueden corresponder a gotas de baja calidad. Y superior con k = 5, esto elimina barcodes con demasiados genes, que pueden ser dobletes, aunque es un poco permisivo para no recortar células reales muy activas.
+
+- % mitocondrial: el límite superior con k = 5, 
+
+
+```{python}
+def limites_mad (x, k):
+    """Devuelve los límites inferior y superior de x según k veces la MAD."""
+    mediana = np.median(x)
+    mad = np.median(np.abs(x - mediana))
+    return mediana - k * mad, mediana + k * mad
+
+obs = adata.obs
+metricas = {
+    "log1p_total_counts": np.log1p(obs["total_counts"]).to_numpy(),
+    "log1p_n_genes_by_counts": np.log1p(obs["n_genes_by_counts"]).to_numpy(),
+    "pct_counts_mt": obs["pct_counts_mt"].to_numpy(),
+}
+
+limites = []
+for nombre, x in metricas.items():
+    for k in [3,4,5]:
+        lo, hi = limites_mad(x, k)
+        fuera= int (((x < lo) | (x > hi)).sum())
+        limites.append({
+            "metrica": nombre,
+            "k": k,
+            "limite_inferior": lo,
+            "limite_superior": hi,
+            "barcodes_fuera": fuera,
+        })
+print(pd.DataFrame(limites).round(2).to_string(index=False))
+
+fig, axes = plt.subplots(1, 3, figsize=(13, 3.5))
+x_g = obs["n_genes_by_counts"].to_numpy()
+axes[0].hist(x_g, bins=60)
+axes[0].set(title="Genes detectados", xlabel="n_genes_by_counts", ylabel="barcodes")
+for k in [3, 5]:
+    lo, hi = limites_mad(x_g, k)
+    axes[0].axvline(lo, color="red", ls="--", lw=0.8)
+    axes[0].axvline(hi, color="red", ls="--", lw=0.8)
+x_mt = obs["pct_counts_mt"].to_numpy()
+axes[1].hist(x_mt, bins=60)
+axes[1].set(title="% mitocondrial", xlabel="pct_counts_mt", ylabel="barcodes")
+for k in [3, 5]:
+    lo, hi = limites_mad(x_mt, k)
+    axes[1].axvline(lo, color="red", ls="--", lw=0.8)
+    axes[1].axvline(hi, color="red", ls="--", lw=0.8)
+x_tc = obs["total_counts"].to_numpy()
+axes[2].hist(x_tc, bins=60)
+axes[2].set(title="Cuentas totales", xlabel="total_counts", ylabel="barcodes")
+for k in [3, 5]:
+    lo, hi = limites_mad(x_tc, k)
+    axes[2].axvline(lo, color="red", ls="--", lw=0.8)
+    axes[2].axvline(hi, color="red", ls="--", lw=0.8)
+plt.tight_layout()
+guardar(fig, "06_hist_qc_mad")
+
+```
+
+Despues del filtro nos quedaron 37,40 barcodes, es decir el 91.5% de los 4,088 barcodes que se tenian un paso antes.
+
+
+### Genes
+
+Con los barcodes ya filtrados, revisamos cuántos genes sobrevivian exigiendo que estuvieran en un mínimo de 1,3,5,10 y 20 células. Elegimos 3 por que elimina genes detectados y que no estan en ninguna célula, por que pues estas no nos aportan nada más que confusión y tambien evitamos descartar genes de poblaciones pequeñas. 
+
+```{python}
+n_cel_por_gen = np.asarray((adata_f.X > 0).sum(axis=0)).ravel()
+tabla_genes = pd.DataFrame({
+    "min_celulas": [1, 3, 5, 10, 20],
+    "genes_retenidos": [int((n_cel_por_gen >= m).sum()) for m in [1, 3, 5, 10, 20]],
+})
+tabla_genes["porcentaje_retenido"] = 100 * tabla_genes["genes_retenidos"]  / adata_f.n_vars
+tabla_genes["genes_eliminados"] = adata_f.n_vars - tabla_genes["genes_retenidos"]
+print(tabla_genes.to_string(index=False))
+
+# %% grafica para saber cuantas celuas dectadas por gen
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.hist(n_cel_por_gen, bins=60)
+ax.set(xlabel="Células detectadas por gen", ylabel="genes", yscale="log", title="Genes detectados en >= 1 célula")
+for m in [1 , 3, 5, 10, 20]:
+    ax.axvline(m, color="red", ls="--", lw=0.8)
+guardar(fig, "07_hist_genes_detectados")
+```
+
+Con esto pasamos de 38,606 a 23,801 genes.
+
+### Dobletes
+
+Otra cosa que hicimos fue correr Scrublet para anotar el puntaje de doblete por célula, en este caso no eliminamos ninguna, ya que en el histograma que generamos, los puntajes no muestra que haya poblaciones separadas, entonces no creemos que confiar en el umbral automatico sea confiable. 
+
+```{python}
+
+c.pp.scrublet(adata_f, random_state=SEMILLA)
+
+print(f"Dobletes predichos: {adata_f.obs['predicted_doublet'].sum()} "
+      f"de {adata_f.n_obs} ({100 * adata_f.obs['predicted_doublet'].mean():.1f} %)")
+print(f"Umbral: {adata_f.uns['scrublet']['threshold']:.3f}")
+
+fig, ax = plt.subplots(figsize=(5, 3.5))
+ax.hist(adata_f.obs["doublet_score"], bins=60, log=True)
+ax.axvline(adata_f.uns["scrublet"]["threshold"], color="red", ls="--", lw=1)
+ax.set(xlabel="Puntaje de doblete", ylabel="barcodes (log)",
+       title="Scrublet (línea roja = umbral automático)")
+guardar(fig, "08_scrublet")
+
+```
+
+
+
+
 
 ## 3. Normalización y selección de genes
 
@@ -125,14 +343,16 @@ Aquí va la interpretación biológica, no la descripción de lo que hizo el có
 **Criterio A3 de la rúbrica, 15 %.** Llénala sobre la marcha, no al final: la
 columna que más pesa es la tercera, y reconstruirla de memoria produce
 justificaciones vacías.
+| Valor decidido | Decisión | Por qué | Qué se probó antes |
+|---|---|---|---| 
+|   | 500| Umbral de cuentas mínimas | Casi todos los barcodes son gotas vacías con muy pocas cuentas. En el histograma se ven dos grupos separados (vacías y células), y 500 cae en el espacio entre ellos. La curva de rango también cae de golpe en ~4,000 barcodes| Se probaron valores de 200,300, 400, 500, 1000, 2000, 5000, los resultados se mantienen estables de 200 a 2000 y 5000 recorta el pico de células |
+|   | Entre 1,551 y 6,249| Umbral de genes detectados | Una célula dañada o un resto celular detecta pocos genes, y por eso se quita lo que está por debajo de 1,551, un grupo bajo separado del grupo principal. Arriba se dejó un límite amplio (6,249), porque los dobletes (dos células en una gota) se revisan mejor con otra herramienta| Tres niveles de exigencia (k = 3, 4 y 5). Con el más estricto se perdía el 18 % de los barcodes, demasiado, porque ya cortaba células normales|
+|   | 8.65% | Fracción mitocondrial máxima | Cuando una célula se rompe, pierde casi todo su RNA excepto el mitocondrial, así que un % mt alto indica célula dañada. La mayoría de tus células está en ~4.4 %, y el corte solo quita la cola larga. No usamos un valor de específico, porque no sabemos el tejido| Tres niveles de exigencia (cortes de 6.95 %, 7.80 % y 8.65 %). Se eligió el más permisivo porque no hay un grupo claramente anormal en ese rango.|
+|   | 3 | Mínimo de células por gen | Quitamos genes detectados en 1-2 células de 3,749 células que pueden ser ruido. No encontramos un punto de quiebre donde pudiéramos definir claramente el umbral, entonces nos guiamos del estándar de la literatura| 1, 3, 5, 10 y 20, se ve una caída gradual sin puntos de quiebre, con esto nos quedan 23,801 genes en un mínimo de 3 células|
+|   | No se filtró | Filtro de dobletes | El histograma de Scrublet no muestra dos grupos separados así que el umbral automático no tiene respaldo. Pero estos valores se anotaron | Scrublet tiene un umbral automático, encontramos 26 dobletes (0.7%) |
+|   | Escalar cada célula a 10,000 cuentas totales y aplicar logaritmo | Normalización | Revisamos el histograma del tamaño de biblioteca y vimos que cada célula tenía una cantidad muy distinta de cuentas (de 2,679 a 29,371; mediana 7,928), lo cual refleja diferencias de secuenciación y no biología. Por eso escalamos cada célula a 10,000 cuentas totales. Elegimos 10,000 porque es un valor estándar y porque queda cerca de la mediana de nuestros datos, así que no distorsiona las cuentas de la mayoría de las células. Después de normalizar, todas suman exactamente 10,000, y el logaritmo reduce el peso de los valores extremos | Hicimos un histograma del tamaño de la biblioteca y comparamos contra 1e4 contra usar la mediana como alternativa|
+|   | Quedarnos con los 2,000 genes que más cambian entre células  | Selección de genes variables | Elegimos 2,000 genes con seurat_v3 sobre las cuentas originales, porque es un número estándar y porque los datos lo respaldan: el gen en el lugar 2,000 todavía varía más de lo esperado por azar (varianza normalizada de 1.41, cuando sin variación extra sería ~1), y la mediana de los HVG es 1.78 contra 0.92 del resto de los genes. Además, casi no hay genes técnicos entre ellos (0 ribosomales y 2 mitocondriales), y los primeros son marcadores de células inmunes | Comparamos  1,000, 2,000 y 3,000 genes, pero como cada conjunto incluye al anterior esa comparación no aportó información, así que nos basamos en la variabilidad del último gen elegido|
 
-| Decisión | Valor elegido | Por qué | Qué se probó antes |
-|---|---|---|---|
-| Umbral de cuentas mínimas | | | |
-| Umbral de genes detectados | | | |
-| Fracción mitocondrial máxima | | | |
-| Número de componentes principales | | | |
-| Resolución de agrupamiento r| | | |
 
 ## Lo que no funcionó
 
@@ -142,15 +362,26 @@ proyecto que no exploró.
 
 ## Registro de sesión
 
-```{r}
+```{python}
 #| label: sesion
-sessionInfo()
+import sys, platform
+from importlib.metadata import version
+
+print("Python:", sys.version)
+print("Sistema:", platform.platform())
+for paquete in ["scanpy", "anndata", "numpy", "pandas", "scipy",
+                "scikit-learn", "scrublet", "matplotlib", "scikit-misc"]:
+    try:
+        print(f"{paquete}=={version(paquete)}")
+    except Exception:
+        print(f"{paquete}: no instalado")
 ```
+
 
 ::: {.callout-tip}
 ## Por qué este bloque no se borra
 
-`sessionInfo()` es lo que permite que dentro de un año alguien sepa con qué
+Es lo que permite que dentro de un año alguien sepa con qué
 versiones corrió esto. Es la diferencia entre un análisis reproducible y uno que
 funcionaba en la máquina de quien lo escribió.
 :::
