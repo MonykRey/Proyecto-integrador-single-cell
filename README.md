@@ -111,7 +111,7 @@ excluye. Declara aquí de dónde salen.
 
 | Dato | Dónde vive | Cómo se obtuvo |
 |---|---|---|
-| Matriz de cuentas 10x del equipo C (`matrix.mtx`, `genes.tsv`, `barcodes.tsv`; 38,606 genes x 927,681 barcodes, matriz *raw*) | `/mnt/data/bioinfo3/compartido/10x/datasets/proyecto-2026/proyecto-equipo-C` | Asignada al equipo C por el curso de Bioinformática y Estadística 3. Se copia a `data/proyecto-equipo-C/` con `scp` |
+| Matriz de cuentas 10x del equipo C (`matrix.mtx`, `genes.tsv`, `barcodes.tsv`) | `/mnt/data/bioinfo3/compartido/10x/datasets/proyecto-2026/proyecto-equipo-C` | Asignada al equipo C por el curso de Bioinformática y Estadística 3 |
 
 ## Estructura 🌳
 
