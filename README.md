@@ -11,7 +11,7 @@ bonito, sino que corra en otra máquina sin intervención manual.
 
 | Nombre | Qué hizo |
 |---|---|
-| Mónica Reyes Ramírez| Control de calidad y Normalización/selección de genes  |
+| Mónica Reyes Ramírez| Control de calidad y Normalización/selección de genes |
 | Natalie B. Pineda Morán | Preguntas iniciales y Reducción de dimensionalidad /agrupamiento |
 
 
@@ -35,7 +35,7 @@ Los datos no se suben al repositorio. Para obtenerlos:
 
 1. Descarga a tu computadora la carpeta de datos del equipo C. Si están en el clúster, puedes copiarla con:
 ```bash
-   scp -r <usuario>@<servidor>:<ruta-en-el-cluster>/proyecto-equipo-C ./data/
+   scp -r <usuario>@<servidor>: /mnt/data/bioinfo3/compartido/10x/datasets/proyecto-2026/proyecto-equipo-C ./data/
 ```
 2. La carpeta debe contener **barcodes.tsv, genes.tsv y matrix.mtx**.
 3. Cambia la ruta **en los dos archivos**. En ambos es la primera variable:
@@ -111,7 +111,7 @@ excluye. Declara aquí de dónde salen.
 
 | Dato | Dónde vive | Cómo se obtuvo |
 |---|---|---|
-| | `/ruta/en/el/cluster` | |
+| Matriz de cuentas 10x del equipo C (`matrix.mtx`, `genes.tsv`, `barcodes.tsv`; 38,606 genes x 927,681 barcodes, matriz *raw*) | `/mnt/data/bioinfo3/compartido/10x/datasets/proyecto-2026/proyecto-equipo-C` | Asignada al equipo C por el curso de Bioinformática y Estadística 3. Se copia a `data/proyecto-equipo-C/` con `scp` |
 
 ## Estructura 🌳
 
