@@ -39,7 +39,7 @@ tu copia de los datos está en otro sitio, cambia solo este bloque.
 
 ```{python}
 #| label: rutas
-RUTA_DATOS = "data/proyecto-equipo-C/"      # <- el objeto que se le asignó a tu equipo
+RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"      # <- el objeto que se le asignó a tu equipo
 ```
 
 ### Semilla
@@ -84,6 +84,13 @@ from pathlib import Path       # manejo de rutas de archivos de forma portable
 
 # Añade aquí lo que uses. Si no está en envs/renv.lock del curso,
 # no va a existir en el cluster: comprueba antes de depender de ello.
+
+Path("figuras").mkdir(exist_ok=True)
+
+def guardar(fig, nombre):
+    fig.savefig(f"figuras/{nombre}.png", dpi=150, bbox_inches="tight")
+    plt.show()
+
 ```
 
 ## 1. De dónde vienen estos datos
@@ -181,6 +188,9 @@ Lo que hicimos en esta parte fue hacer un histograma de cuentas totales (escala 
 
 ```{python}
 #| label: Umbral de cuentas totales
+adata.var["mt"] = adata.var_names.str.upper().str.startswith("MT-")
+sc.pp.calculate_qc_metrics(adata, qc_vars=["mt"], percent_top=None,
+                           log1p=False, inplace=True)
 tc = adata.obs["total_counts"]
 candidatos = [200, 300, 400, 500]
 
@@ -217,8 +227,8 @@ En lugar de fijar un número random, calculamos los límites a partir de la medi
 
 
 ```{python}
+#| label: limites-mad
 def limites_mad (x, k):
-    """Devuelve los límites inferior y superior de x según k veces la MAD."""
     mediana = np.median(x)
     mad = np.median(np.abs(x - mediana))
     return mediana - k * mad, mediana + k * mad
@@ -269,6 +279,17 @@ for k in [3, 5]:
 plt.tight_layout()
 guardar(fig, "06_hist_qc_mad")
 
+g = np.log1p(adata.obs["n_genes_by_counts"].to_numpy())
+mt = adata.obs["pct_counts_mt"].to_numpy()
+g_min = limites_mad(g, 4)[0]
+g_max = limites_mad(g, 5)[1]
+mt_max = limites_mad(mt, 5)[1]
+mantener = ~((g < g_min) | (g > g_max) | (mt > mt_max))
+print(f"Genes: {np.expm1(g_min):.0f} a {np.expm1(g_max):.0f} | % mt máx: {mt_max:.2f}")
+print(f"Antes del filtro: {adata.n_obs} barcodes")
+adata_f = adata[mantener].copy()
+print(f"Después del filtro: {adata_f.n_obs} barcodes ({100 * adata_f.n_obs / adata.n_obs:.1f} %)")
+
 ```
 
 Despues del filtro nos quedaron 37,40 barcodes, es decir el 91.5% de los 4,088 barcodes que se tenian un paso antes.
@@ -279,6 +300,7 @@ Despues del filtro nos quedaron 37,40 barcodes, es decir el 91.5% de los 4,088 b
 Con los barcodes ya filtrados, revisamos cuántos genes sobrevivian exigiendo que estuvieran en un mínimo de 1,3,5,10 y 20 células. Elegimos 3 por que elimina genes detectados y que no estan en ninguna célula, por que pues estas no nos aportan nada más que confusión y tambien evitamos descartar genes de poblaciones pequeñas. 
 
 ```{python}
+#| label: numero de genes en 3 células
 n_cel_por_gen = np.asarray((adata_f.X > 0).sum(axis=0)).ravel()
 tabla_genes = pd.DataFrame({
     "min_celulas": [1, 3, 5, 10, 20],
@@ -295,6 +317,9 @@ ax.set(xlabel="Células detectadas por gen", ylabel="genes", yscale="log", title
 for m in [1 , 3, 5, 10, 20]:
     ax.axvline(m, color="red", ls="--", lw=0.8)
 guardar(fig, "07_hist_genes_detectados")
+
+adata_f = adata_f[:, n_cel_por_gen >= 3].copy()
+print(f"Genes después del filtro: {adata_f.n_vars}")
 ```
 
 Con esto pasamos de 38,606 a 23,801 genes.
@@ -304,8 +329,8 @@ Con esto pasamos de 38,606 a 23,801 genes.
 Otra cosa que hicimos fue correr Scrublet para anotar el puntaje de doblete por célula, en este caso no eliminamos ninguna, ya que en el histograma que generamos, los puntajes no muestra que haya poblaciones separadas, entonces no creemos que confiar en el umbral automatico sea confiable. 
 
 ```{python}
-
-c.pp.scrublet(adata_f, random_state=SEMILLA)
+#| label: dobletes detectados con Scrublet
+sc.pp.scrublet(adata_f, random_state=SEMILLA)
 
 print(f"Dobletes predichos: {adata_f.obs['predicted_doublet'].sum()} "
       f"de {adata_f.n_obs} ({100 * adata_f.obs['predicted_doublet'].mean():.1f} %)")
@@ -390,22 +415,27 @@ Aquí va la interpretación biológica, no la descripción de lo que hizo el có
 **Criterio A3 de la rúbrica, 15 %.** Llénala sobre la marcha, no al final: la
 columna que más pesa es la tercera, y reconstruirla de memoria produce
 justificaciones vacías.
+
 | Valor decidido | Decisión | Por qué | Qué se probó antes |
 |---|---|---|---| 
-|   | 500| Umbral de cuentas mínimas | Casi todos los barcodes son gotas vacías con muy pocas cuentas. En el histograma se ven dos grupos separados (vacías y células), y 500 cae en el espacio entre ellos. La curva de rango también cae de golpe en ~4,000 barcodes| Se probaron valores de 200,300, 400, 500, 1000, 2000, 5000, los resultados se mantienen estables de 200 a 2000 y 5000 recorta el pico de células |
-|   | Entre 1,551 y 6,249| Umbral de genes detectados | Una célula dañada o un resto celular detecta pocos genes, y por eso se quita lo que está por debajo de 1,551, un grupo bajo separado del grupo principal. Arriba se dejó un límite amplio (6,249), porque los dobletes (dos células en una gota) se revisan mejor con otra herramienta| Tres niveles de exigencia (k = 3, 4 y 5). Con el más estricto se perdía el 18 % de los barcodes, demasiado, porque ya cortaba células normales|
-|   | 8.65% | Fracción mitocondrial máxima | Cuando una célula se rompe, pierde casi todo su RNA excepto el mitocondrial, así que un % mt alto indica célula dañada. La mayoría de tus células está en ~4.4 %, y el corte solo quita la cola larga. No usamos un valor de específico, porque no sabemos el tejido| Tres niveles de exigencia (cortes de 6.95 %, 7.80 % y 8.65 %). Se eligió el más permisivo porque no hay un grupo claramente anormal en ese rango.|
-|   | 3 | Mínimo de células por gen | Quitamos genes detectados en 1-2 células de 3,749 células que pueden ser ruido. No encontramos un punto de quiebre donde pudiéramos definir claramente el umbral, entonces nos guiamos del estándar de la literatura| 1, 3, 5, 10 y 20, se ve una caída gradual sin puntos de quiebre, con esto nos quedan 23,801 genes en un mínimo de 3 células|
-|   | No se filtró | Filtro de dobletes | El histograma de Scrublet no muestra dos grupos separados así que el umbral automático no tiene respaldo. Pero estos valores se anotaron | Scrublet tiene un umbral automático, encontramos 26 dobletes (0.7%) |
-|   | Escalar cada célula a 10,000 cuentas totales y aplicar logaritmo | Normalización | Revisamos el histograma del tamaño de biblioteca y vimos que cada célula tenía una cantidad muy distinta de cuentas (de 2,679 a 29,371; mediana 7,928), lo cual refleja diferencias de secuenciación y no biología. Por eso escalamos cada célula a 10,000 cuentas totales. Elegimos 10,000 porque es un valor estándar y porque queda cerca de la mediana de nuestros datos, así que no distorsiona las cuentas de la mayoría de las células. Después de normalizar, todas suman exactamente 10,000, y el logaritmo reduce el peso de los valores extremos | Hicimos un histograma del tamaño de la biblioteca y comparamos contra 1e4 contra usar la mediana como alternativa|
-|   | Quedarnos con los 2,000 genes que más cambian entre células  | Selección de genes variables | Elegimos 2,000 genes con seurat_v3 sobre las cuentas originales, porque es un número estándar y porque los datos lo respaldan: el gen en el lugar 2,000 todavía varía más de lo esperado por azar (varianza normalizada de 1.41, cuando sin variación extra sería ~1), y la mediana de los HVG es 1.78 contra 0.92 del resto de los genes. Además, casi no hay genes técnicos entre ellos (0 ribosomales y 2 mitocondriales), y los primeros son marcadores de células inmunes | Comparamos  1,000, 2,000 y 3,000 genes, pero como cada conjunto incluye al anterior esa comparación no aportó información, así que nos basamos en la variabilidad del último gen elegido|
+| 500| Umbral de cuentas mínimas | Casi todos los barcodes son gotas vacías con muy pocas cuentas. En el histograma se ven dos grupos separados (vacías y células), y 500 cae en el espacio entre ellos. La curva de rango también cae de golpe en ~4,000 barcodes| Se probaron valores de 200,300, 400, 500, 1000, 2000, 5000, los resultados se mantienen estables de 200 a 2000 y 5000 recorta el pico de células |
+| Entre 1,551 y 6,249| Umbral de genes detectados | Una célula dañada o un resto celular detecta pocos genes, y por eso se quita lo que está por debajo de 1,551, un grupo bajo separado del grupo principal. Arriba se dejó un límite amplio (6,249), porque los dobletes (dos células en una gota) se revisan mejor con otra herramienta| Tres niveles de exigencia (k = 3, 4 y 5). Con el más estricto se perdía el 18 % de los barcodes, demasiado, porque ya cortaba células normales|
+| 8.65% | Fracción mitocondrial máxima | Cuando una célula se rompe, pierde casi todo su RNA excepto el mitocondrial, así que un % mt alto indica célula dañada. La mayoría de tus células está en ~4.4 %, y el corte solo quita la cola larga. No usamos un valor de específico, porque no sabemos el tejido| Tres niveles de exigencia (cortes de 6.95 %, 7.80 % y 8.65 %). Se eligió el más permisivo porque no hay un grupo claramente anormal en ese rango.|
+| 3 | Mínimo de células por gen | Quitamos genes detectados en 1-2 células de 3,749 células que pueden ser ruido. No encontramos un punto de quiebre donde pudiéramos definir claramente el umbral, entonces nos guiamos del estándar de la literatura| 1, 3, 5, 10 y 20, se ve una caída gradual sin puntos de quiebre, con esto nos quedan 23,801 genes en un mínimo de 3 células|
+| No se filtró | Filtro de dobletes | El histograma de Scrublet no muestra dos grupos separados así que el umbral automático no tiene respaldo. Pero estos valores se anotaron | Scrublet tiene un umbral automático, encontramos 26 dobletes (0.7%) |
+| Escalar cada célula a 10,000 cuentas totales y aplicar logaritmo | Normalización | Revisamos el histograma del tamaño de biblioteca y vimos que cada célula tenía una cantidad muy distinta de cuentas (de 2,679 a 29,371; mediana 7,928), lo cual refleja diferencias de secuenciación y no biología. Por eso escalamos cada célula a 10,000 cuentas totales. Elegimos 10,000 porque es un valor estándar y porque queda cerca de la mediana de nuestros datos, así que no distorsiona las cuentas de la mayoría de las células. Después de normalizar, todas suman exactamente 10,000, y el logaritmo reduce el peso de los valores extremos | Hicimos un histograma del tamaño de la biblioteca y comparamos contra 1e4 contra usar la mediana como alternativa|
+| Quedarnos con los 2,000 genes que más cambian entre células  | Selección de genes variables | Elegimos 2,000 genes con seurat_v3 sobre las cuentas originales, porque es un número estándar y porque los datos lo respaldan: el gen en el lugar 2,000 todavía varía más de lo esperado por azar (varianza normalizada de 1.41, cuando sin variación extra sería ~1), y la mediana de los HVG es 1.78 contra 0.92 del resto de los genes. Además, casi no hay genes técnicos entre ellos (0 ribosomales y 2 mitocondriales), y los primeros son marcadores de células inmunes | Comparamos  1,000, 2,000 y 3,000 genes, pero como cada conjunto incluye al anterior esa comparación no aportó información, así que nos basamos en la variabilidad del último gen elegido|
 
 
 ## Lo que no funcionó
 
-Un apartado corto y honesto. Qué intentaron que no salió, y qué aprendieron de
-ello. No resta puntos: un proyecto sin callejones sin salida normalmente es un
-proyecto que no exploró.
+**Umbrales de QC muy estrictos.** Al principio probamos k = 3 para los límites de MAD de genes detectados y % mitocondrial. Con ese valor se perdía alrededor del 18 % de los barcodes, y al revisar los histogramas vimos que ya estaba cortando células que parecían normales. Aprendimos que un umbral estadístico no se puede aceptar sin mirar cuántos barcodes elimina y dónde cae sobre la distribución. Por eso terminamos con k = 4 y k = 5.
+
+**El umbral automático de Scrublet.** Corrimos Scrublet esperando separar dobletes con su umbral automático, pero el histograma de puntajes no mostró dos poblaciones separadas, así que ese corte no tenía respaldo. Decidimos no eliminar ningún barcode y dejar los puntajes anotados. 
+
+**Comparar 1,000, 2,000 y 3,000 genes variables.** Intentamos justificar el número de genes comparando qué tanto se parecían los conjuntos de 1,000, 2,000 y 3,000, pero seurat_v3 ordena los genes de mayor a menor variabilidad y toma los primeros n, así que cada conjunto contiene al anterior y la comparación no decía nada. 
+
+**No encontramos punto de quiebre para el filtro de genes.** Al revisar cuántos genes sobrevivían con un mínimo de 1, 3, 5, 10 y 20 células, la caída fue gradual y no había un valor donde el corte se justificara claramente. Terminamos usando 3 por que era el número que se nos hacia mejor ( que elimina genes detectados y que no estan en ninguna célula, además de que era un número que encontramos que es por convención así que nos dio un poco más de confianza)
 
 ## Registro de sesión
 
