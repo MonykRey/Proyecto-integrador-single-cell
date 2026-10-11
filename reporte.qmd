@@ -61,7 +61,7 @@ np.random.seed(SEMILLA)
 
 ```{python}
 #| label: paquetes
-#$ --- Librerías estándar ---
+# --- Librerías estándar ---
 
 import random                  # generación de números aleatorios (útil para fijar semillas)
 import sys, platform, os        # utilidades de sistema (rutas, entorno, etc.)
@@ -398,17 +398,200 @@ print(f"HVG: {int(adata_f.var['highly_variable'].sum())} de {adata_f.n_vars} gen
 
 ```
 
-
 ## 4. Reducción de dimensionalidad y agrupamiento
 
-```{r}
+Tomamos los 2,000 genes variables y calculamos los PC's. En la siguiente gráfica podemos observar que se forma un codo que cae muy rápido en los primeros componentes: 
+
+- La varianza pasa de $\approx 0.11$ en PC1 a 0.007 en el PC5. 
+
+- Los primeros 5 PC's acumulan el 21% de la varianza total. Entre el PC 6 y el PC 20 la caída es más lenta
+
+- A partir de aproximadamente el PC 22 la curva se vuelve como una meseta y cada componente aporta muy poco
+
+En la gráfica el codo no marca un solo punto de corte, sino que lo podríamos usar como un rango donde el primer quiebre es en PC5 y el segundo cerca de PC 20-22. Es por ello que elegimos 20 PC's como un valor provisional que después ajustamos con un análisis de sensibilidad.  
+```{python}
 #| label: reduccion
-#| eval: false
+from sklearn.metrics import adjusted_rand_score, silhouette_score
+
+adata_hvg = adata_f[:, adata_f.var["highly_variable"]].copy()
+adata_pca = adata_hvg.copy()
+sc.pp.scale(adata_pca, max_value=10)
+sc.pp.pca(adata_pca, n_comps=50, random_state=SEMILLA)
+
+vr = adata_pca.uns["pca"]["variance_ratio"]
+tabla_pca = pd.DataFrame({"PC": np.arange(1, 51), "varianza": vr,
+                          "acumulada": np.cumsum(vr)})
+print(tabla_pca.iloc[[4, 9, 14, 19, 29, 39, 49]].round(4).to_string(index=False))
+
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.plot(np.arange(1, 51), vr, "o-", ms=3)
+ax.set(yscale="log", xlabel="Componente principal",
+       ylabel="Fracción de varianza", title="Codo del PCA")
+guardar(fig, "10_pca_codo")
 ```
+
+### ¿Algún PC refleja técnica y no biología?
+
+Correlacionamos los primeros 10 PCs con cuentas totales, % mitocondrial y puntaje
+de doblete, para ver si alguno de ellos captura variación técnica y no biológica.
+
+```{python}
+#| label: pcs-tecnica
+for cov in ["total_counts", "pct_counts_mt", "doublet_score"]:
+    r = [np.corrcoef(adata_pca.obsm["X_pca"][:, i], adata_pca.obs[cov])[0, 1]
+         for i in range(10)]
+    print(f"{cov:15s} correlación con PC1-PC10:", np.round(r, 2))
+```
+
+Ningún PC muestra una correlación fuerte con las covariables técnicas (la más alta
+es 0.39). Las cuentas totales correlacionan moderadamente con PC1 (0.39), PC6
+(0.37) y PC10 (-0.32), y el % mitocondrial con PC1 (0.34) y PC9 (0.31). El puntaje
+de doblete tiene correlaciones bajas con todos los PCs (|r| ≤ 0.18). Como con
+r = 0.39 solo ~15 % de la variación de PC1 se asocia linealmente con las cuentas
+totales, y los tipos celulares también difieren en su contenido de RNA, no
+interpretamos esto como un efecto técnico dominante. Por eso conservamos todos los
+PCs y no regresamos ninguna covariable; en la sección de agrupamiento revisamos si
+algún grupo se explica por cuentas, % mt o dobletes.
+
+### Sensibilidad: número de PCs y resolución
+
+Antes de fijar el agrupamiento probamos qué tanto cambian los grupos al variar el
+número de PCs y la resolución de Leiden. Para el número de PCs usamos el ARI
+(índice de Rand ajustado) contra una referencia con 20 PCs; para la resolución
+revisamos el número de grupos, el tamaño del grupo más chico y la silueta.
+
+```{python}
+#| label: sensibilidad
+def agrupar(a, n_pcs, n_vecinos, resolucion, clave):
+    sc.pp.neighbors(a, n_neighbors=n_vecinos, n_pcs=n_pcs, random_state=SEMILLA)
+    sc.tl.leiden(a, resolution=resolucion, key_added=clave, random_state=SEMILLA,
+                 flavor="igraph", n_iterations=2, directed=False)
+    return a.obs[clave].copy()
+
+N_PCS, N_VECINOS, RESOLUCION = 20, 15, 0.5   # provisionales
+
+ref = agrupar(adata_pca, N_PCS, N_VECINOS, RESOLUCION, "ref")
+filas = []
+for n in [10, 15, 20, 30, 40]:
+    e = agrupar(adata_pca, n, N_VECINOS, RESOLUCION, f"pcs_{n}")
+    filas.append({"n_pcs": n, "n_grupos": e.nunique(),
+                  "ARI_vs_referencia": round(adjusted_rand_score(ref, e), 3)})
+print(pd.DataFrame(filas).to_string(index=False))
+
+filas = []
+for r in [0.2, 0.5, 0.8, 1.0, 1.5]:
+    e = agrupar(adata_pca, N_PCS, N_VECINOS, r, f"res_{r}")
+    filas.append({"resolucion": r, "n_grupos": e.nunique(),
+                  "grupo_mas_chico": int(e.value_counts().min()),
+                  "silueta": round(silhouette_score(
+                      adata_pca.obsm["X_pca"][:, :N_PCS], e), 3)})
+print(pd.DataFrame(filas).to_string(index=False))
+```
+
+Con resolución 0.5, el agrupamiento es estable respecto al número de PCs: con 15,
+30 y 40 PCs el ARI contra la referencia (20 PCs) es de 0.975, 0.945 y 0.951, y el
+número de grupos se mantiene entre 11 y 12. Con 10 PCs el ARI baja a 0.888 y se
+pierde un grupo, lo que sugiere que 10 PCs ya no capturan toda la estructura.
+Elegimos 20 PCs porque coincide con el segundo quiebre del codo y queda dentro de
+la zona estable.
+
+Para la resolución, 0.5 tiene la silueta más alta (0.355) y su grupo más chico
+tiene 28 células. A partir de 0.8 la silueta cae a 0.235 y aparecen grupos de 15
+células, y con 1.5 se llega a 20 grupos con silueta de 0.181, lo que indica
+sobre-fragmentación. Con 0.2 hay 9 grupos y una silueta similar (0.351), pero
+fusiona dos grupos más que 0.5. Elegimos resolución 0.5 y 15 vecinos.
+
+### Agrupamiento final y UMAP
+
+El UMAP se usa solo para visualizar; los grupos se definen en el espacio del PCA.
+
+```{python}
+#| label: agrupamiento-final
+adata_pca.obs["grupos"] = agrupar(adata_pca, N_PCS, N_VECINOS, RESOLUCION, "grupos")
+print(adata_pca.obs["grupos"].value_counts().sort_index().to_string())
+
+sc.tl.umap(adata_pca, random_state=SEMILLA)
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+for ax, col in zip(axes.ravel(),
+                   ["grupos", "total_counts", "pct_counts_mt", "doublet_score"]):
+    sc.pl.umap(adata_pca, color=col, ax=ax, show=False, title=col, s=10)
+plt.tight_layout()
+guardar(fig, "11_umap_grupos_y_covariables")
+
+print(adata_pca.obs.groupby("grupos", observed=True)
+      [["total_counts", "n_genes_by_counts", "pct_counts_mt", "doublet_score"]]
+      .median().round(2).to_string())
+```
+
+Con 20 PCs, 15 vecinos y resolución 0.5 obtuvimos 11 grupos de entre 28 y 1,059
+células. Ningún grupo se explica por técnica: las medianas de % mitocondrial van
+de 3.57 a 5.91 %, todas por debajo del corte de 8.65 %; las medianas de doblete
+van de 0.01 a 0.07, lejos del umbral de 0.366; y ningún grupo tiene cuentas
+bajas (la mediana más baja es 6,241). Los grupos 9 y 10 (28 y 49 células)
+destacan por tener muchas más cuentas (14,646 y 19,508) y genes detectados
+(4,458 y 5,175) que el resto, además de los puntajes de doblete más altos (0.06
+y 0.07). Con estas covariables no se puede distinguir si son dobletes o un tipo
+celular con más RNA, por lo que los conservamos y los revisamos con los
+marcadores.
 
 ## 5. Lo que encontraron
 
-Aquí va la interpretación biológica, no la descripción de lo que hizo el código.
+Los 11 grupos corresponden a los tipos celulares esperados en sangre periférica.
+Los linfocitos T son la mayoría (2,326 células, 62 %): dos grupos T CD4 (0 y 2;
+el 2 con LEF1 y CCR7 alto, perfil naive, y el 0 con INPP4B y RORA, perfil de
+memoria), dos grupos T CD8 (1 y 3; el 1 con CCL5 y GZMK, efectoras/memoria, y el
+3 con CD8B y LEF1, naive) y un grupo MAIT (8, con KLRB1 y SLC4A10). Los
+monocitos clásicos (grupo 4, 673 células) expresan CD14, LYZ, S100A8 y VCAN, y
+las células B (grupos 5 y 6, 506 células) expresan MS4A1, CD79A y BANK1. El
+grupo 7 (158 células) son NK (NKG7, GNLY, KLRF1, PRF1). Los grupos 9 y 10 son
+los más pequeños: monocitos no clásicos (28 células; FCGR3A, MS4A7, TCF7L2) y
+células dendríticas (49 células; FCER1A, CLEC10A, CD1C).
+
+Los grupos 9 y 10 tenían más cuentas y genes detectados y los puntajes de
+doblete más altos, pero no son dobletes: no coexpresan marcadores de linajes
+distintos (CD3E y MS4A1 casi no se expresan), Scrublet no predijo ningún
+doblete en ellos y quedan junto a los monocitos en el UMAP. Su mayor contenido de
+RNA es consistente con que son células más grandes. Scrublet predijo 26 dobletes
+en total (0.7 %), 22 de ellos en los grupos 4, 5 y 6, por lo que no afectan la
+estructura de los grupos. No pudimos distinguir con este panel los dos grupos de
+células B (5 y 6).
+
+### Genes marcadores por grupo
+
+Para cada grupo buscamos los genes que lo distinguen del resto (prueba de Wilcoxon
+sobre los datos log-normalizados) y mostramos los 5 primeros.
+
+```{python}
+#| label: marcadores-grupos
+adata_f.obs["grupos"] = adata_pca.obs["grupos"]
+sc.tl.rank_genes_groups(adata_f, "grupos", method="wilcoxon")
+print(pd.DataFrame(adata_f.uns["rank_genes_groups"]["names"]).head(5).to_string())
+```
+
+### Marcadores canónicos y dobletes por grupo
+
+```{python}
+#| label: marcadores-canonicos
+print(pd.crosstab(adata_f.obs["grupos"], adata_f.obs["predicted_doublet"]).to_string())
+
+marcadores = {
+    "T / naive": ["CD3E", "IL7R", "LEF1", "CCR7"],
+    "CD8 / efectoras": ["CD8A", "CD8B", "CCL5", "GZMK"],
+    "MAIT": ["KLRB1", "SLC4A10"],
+    "NK": ["NKG7", "GNLY", "KLRF1"],
+    "B": ["MS4A1", "CD79A", "BANK1"],
+    "Mono clásicos": ["CD14", "LYZ", "S100A8", "VCAN"],
+    "Mono no clásicos": ["FCGR3A", "MS4A7", "LST1"],
+    "DC": ["FCER1A", "CLEC10A", "CD1C", "HLA-DRA"],
+    "Plaquetas": ["PPBP"],
+}
+marcadores = {k: [g for g in v if g in adata_f.var_names] for k, v in marcadores.items()}
+marcadores = {k: v for k, v in marcadores.items() if v}
+dp = sc.pl.dotplot(adata_f, marcadores, groupby="grupos", return_fig=True)
+dp.savefig("figuras/12_dotplot_marcadores.png", dpi=150, bbox_inches="tight")
+dp.show()
+```
 
 ## Tabla de decisiones
 
@@ -425,7 +608,10 @@ justificaciones vacías.
 | No se filtró | Filtro de dobletes | El histograma de Scrublet no muestra dos grupos separados así que el umbral automático no tiene respaldo. Pero estos valores se anotaron | Scrublet tiene un umbral automático, encontramos 26 dobletes (0.7%) |
 | Escalar cada célula a 10,000 cuentas totales y aplicar logaritmo | Normalización | Revisamos el histograma del tamaño de biblioteca y vimos que cada célula tenía una cantidad muy distinta de cuentas (de 2,679 a 29,371; mediana 7,928), lo cual refleja diferencias de secuenciación y no biología. Por eso escalamos cada célula a 10,000 cuentas totales. Elegimos 10,000 porque es un valor estándar y porque queda cerca de la mediana de nuestros datos, así que no distorsiona las cuentas de la mayoría de las células. Después de normalizar, todas suman exactamente 10,000, y el logaritmo reduce el peso de los valores extremos | Hicimos un histograma del tamaño de la biblioteca y comparamos contra 1e4 contra usar la mediana como alternativa|
 | Quedarnos con los 2,000 genes que más cambian entre células  | Selección de genes variables | Elegimos 2,000 genes con seurat_v3 sobre las cuentas originales, porque es un número estándar y porque los datos lo respaldan: el gen en el lugar 2,000 todavía varía más de lo esperado por azar (varianza normalizada de 1.41, cuando sin variación extra sería ~1), y la mediana de los HVG es 1.78 contra 0.92 del resto de los genes. Además, casi no hay genes técnicos entre ellos (0 ribosomales y 2 mitocondriales), y los primeros son marcadores de células inmunes | Comparamos  1,000, 2,000 y 3,000 genes, pero como cada conjunto incluye al anterior esa comparación no aportó información, así que nos basamos en la variabilidad del último gen elegido|
-
+| 20 | Número de PCs | El codo tiene un primer quiebre en el PC 5 y un segundo cerca del PC 20-22, después de lo cual la curva es una meseta (cada PC aporta ~0.0013-0.0018). Con 20 PCs el agrupamiento es estable | 10, 15, 20, 30 y 40 PCs. El ARI contra la referencia (20 PCs) fue de 0.975, 0.945 y 0.951 con 15, 30 y 40 PCs; con 10 PCs bajó a 0.888 y se perdió un grupo |
+| 0.5 | Resolución de Leiden | Tiene la silueta más alta (0.355) y el grupo más chico tiene 28 células. Con resolución ≥ 0.8 la silueta cae a 0.235 y aparecen grupos de 15 células; con 1.5 hay 20 grupos (sobre-fragmentación). Los 11 grupos resultantes corresponden a tipos celulares reconocibles con los marcadores | 0.2, 0.5, 0.8, 1.0 y 1.5. Con 0.2 hay 9 grupos y silueta similar (0.351), pero se fusionan dos grupos que con 0.5 sí se separan |
+| 15 | Número de vecinos | Es un valor de scanpy | No se probaron otros valores |
+| Ninguna | Regresión de covariables técnicas | Ningún PC está dominado por técnica: la correlación más alta con cuentas totales, % mt o puntaje de doblete fue 0.39 (PC1 con cuentas totales). En los grupos finales las medianas de % mt (3.57 a 5.91 %) y de doblete (0.01 a 0.07) no indican grupos técnicos | Correlación de PC1 a PC10 con cuentas totales, % mt y puntaje de doblete, y medianas de esas covariables por grupo |
 
 ## Lo que no funcionó
 
