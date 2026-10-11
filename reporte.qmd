@@ -184,7 +184,7 @@ Los datos llegaron como una matriz con 38,606 genes y 927,681 barcodes, donde ca
 
 ### Umbral de cuentas totales.
 
-Lo que hicimos en esta parte fue hacer un histograma de cuentas totales (escala log) donde provamos cuatro valores candidatos (200, 300, 400 y 500), comparamos que pasaba con cada uno, es decir, cuántos barcodes quedaban, cuantos genes se detectaban y como cambiaban las medianas de cuentas, genes y % mitocondrial.
+Lo que hicimos en esta parte fue hacer un histograma de cuentas totales (escala log) donde probamos cuatro valores candidatos (200, 300, 400 y 500), comparamos que pasaba con cada uno, es decir, cuántos barcodes quedaban, cuantos genes se detectaban y como cambiaban las medianas de cuentas, genes y % mitocondrial.
 
 ```{python}
 #| label: Umbral de cuentas totales
@@ -292,7 +292,7 @@ print(f"Después del filtro: {adata_f.n_obs} barcodes ({100 * adata_f.n_obs / ad
 
 ```
 
-Despues del filtro nos quedaron 37,40 barcodes, es decir el 91.5% de los 4,088 barcodes que se tenian un paso antes.
+Despues del filtro nos quedaron 3,740 barcodes, es decir el 91.5% de los 4,088 barcodes que se tenian un paso antes.
 
 
 ### Genes
@@ -371,7 +371,7 @@ sc.pp.log1p(adata_f)
 
 ```
 
-El máximp por célula paso de una media de 305.82 cuentas a 5.84 en escala log, así un gen por ejemplo dominante ya no pesa muchisimas veces más que el resto.
+El máximo por célula paso de una media de 305.82 cuentas a 5.84 en escala log, así un gen por ejemplo dominante ya no pesa muchisimas veces más que el resto.
 
 ### Selección de genes
 
