@@ -39,7 +39,7 @@ tu copia de los datos está en otro sitio, cambia solo este bloque.
 
 ```{python}
 #| label: rutas
-RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"      # <- el objeto que se le asignó a tu equipo
+RUTA_DATOS = "data/proyecto-equipo-C"      # <- el objeto que se le asignó a tu equipo
 ```
 
 ### Semilla
