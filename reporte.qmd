@@ -371,7 +371,7 @@ sc.pp.log1p(adata_f)
 
 ```
 
-El máximp por célula paso de una media de 306 cuentas a 5.84 en escala log, así un gen por ejemplo dominante ya no pesa muchisimas veces más que el resto.
+El máximp por célula paso de una media de 305.82 cuentas a 5.84 en escala log, así un gen por ejemplo dominante ya no pesa muchisimas veces más que el resto.
 
 ### Selección de genes
 
