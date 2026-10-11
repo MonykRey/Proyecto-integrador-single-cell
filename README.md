@@ -1,13 +1,13 @@
-# Proyecto final — equipo C 
+# Proyecto final — equipo C 🐱
 
-## Qué es este repositorio
+## Qué es este repositorio ❓
 
 El análisis del conjunto de datos que se le asignó a tu equipo, de principio a
 fin, de forma que **cualquier persona pueda reproducirlo desde cero**. Esa es la
 condición que se evalúa (criterio A2 de la rúbrica, 30 %): no que el resultado sea
 bonito, sino que corra en otra máquina sin intervención manual.
 
-## Integrantes
+## Integrantes 🧑‍🤝‍🧑
 
 | Nombre | Qué hizo |
 |---|---|
@@ -15,62 +15,96 @@ bonito, sino que corra en otra máquina sin intervención manual.
 | Natalie B. Pineda Morán | Preguntas iniciales y Reducción de dimensionalidad /agrupamiento |
 
 
-## Cómo reproducir este análisis
+## Cómo reproducir este análisis 🧐
+
+El análisis está pensado para correrse **de preferencia en una computadora personal con Visual Studio Code**, no en el clúster.
 
 ```bash
 git clone <url-del-repositorio>
 cd Proyecto-integrador-single-cell
 ```
-### Requisitos 
-- Visual Studio Code
+
+### Requisitos
+- Visual Studio Code (con las extensiones de Python y, opcionalmente, Quarto)
 - Python 3.11
 - conda (recomendado) o pip
+- [Quarto](https://quarto.org/docs/get-started/) instalado, para renderizar el reporte
 
 ### Datos
-- Descarga los datos del equipo C a tu computadora, define la ruta donde se va a guardar esa carpeta que debe contener los archivos **barcodes.tsv, genes.tsv y matrix.mtx.**
-- Luego de clonar el repositorio, abre el archivo `analisis_C.py` en Visual Studio Code y cambia la ruta (que se almacena en la variable RUTA_DATOS) a la ruta donde tienes los datos **barcodes.tsv, genes.tsv y matrix.mtx.**
+Los datos no se suben al repositorio. Para obtenerlos:
 
-### Librerias necesarias para este análisis
+1. Descarga a tu computadora la carpeta de datos del equipo C. Si están en el clúster, puedes copiarla con:
+```bash
+   scp -r <usuario>@<servidor>:<ruta-en-el-cluster>/proyecto-equipo-C ./data/
+```
+2. La carpeta debe contener **barcodes.tsv, genes.tsv y matrix.mtx**.
+3. Cambia la ruta **en los dos archivos**. En ambos es la primera variable:
+   - `analisis_C.py`: variable `RUTA_DATOS`, al inicio del script.
+   - `reporte.qmd`: variable `RUTA_DATOS`, en el chunk `rutas`.
+  
+
+```python
+   RUTA_DATOS = "/ruta/donde/guardaste/proyecto-equipo-C"
+```
+   Si guardas la carpeta en `data/proyecto-equipo-C/` dentro del repositorio, no necesitas cambiar nada. 
+
+### Librerías necesarias
 - numpy
 - pandas
 - matplotlib
+- scikit-learn
 - scanpy
 - python-igraph
 - leidenalg
 - scikit-misc
 - scrublet
+- jupyter, pyyaml, nbformat y nbclient (para renderizar el reporte con Quarto)
 
-### Comandos para instalar las librerías en un entorno (recomendable)
-**En tu terminal de linux/Mac**
+### Instalar las librerías en un entorno (recomendado)
+**En la terminal de Linux/Mac** (o en la terminal integrada de Visual Studio Code):
 
 ```bash
 conda create -n sc-equipoC python=3.11 -y
 conda activate sc-equipoC
-conda install -c conda-forge numpy pandas matplotlib scanpy python-igraph leidenalg scikit-misc jupyter ipykernel -y
+conda install -c conda-forge numpy pandas matplotlib scikit-learn scanpy python-igraph leidenalg scikit-misc jupyter ipykernel pyyaml nbformat nbclient -y
 pip install scrublet
 ```
 > Si `pip` no funciona, prueba con `pip3`.
 
-### Correr el análisis (esto es en tu terminal de Visual Studio Code)
+En Visual Studio Code, selecciona el intérprete del entorno: `Ctrl/Cmd + Shift + P` → **Python: Select Interpreter** → `sc-equipoC`.
+
+### Correr el análisis
+En la terminal de Visual Studio Code:
+
 ```bash
 conda activate sc-equipoC
 python analisis_C.py
 ```
 
+### Renderizar el reporte con quarto
+Con el **entorno activo**, en la **terminal de Rstudio** desde la carpeta del repositorio (donde esta el .qmd):
+
+```bash
+conda activate sc-equipoC
+quarto render reporte.qmd
+```
+
+Esto genera `reporte.html`. Hazlo desde la terminal con `sc-equipoC` activo, porque Quarto usa el Python del entorno activo. Si falla con "Jupyter is not available", instala `jupyter` y `pyyaml` en ese entorno.
+
 ### Salidas
-- Las figuras se guardan automáticamente en `figuras/` al terminar el script.
-- Los datos podrás visualizarlos en tu terminal de Visual Studio Code
+- Las figuras se guardan automáticamente en `figuras/`.
+- Los resultados numéricos se imprimen en la terminal de Visual Studio Code.
+- Los objetos intermedios (`.h5ad`) se guardan en `data/`, que no se versiona.
 
-### Otras formas de poder tener las dependencias
+### Otra forma de instalar las dependencias (sin conda)
+Se puede crear un **entorno virtual** `.venv`:
 
-Para reproducir este análisis se debe ***crear un archivo .venv***
 ```bash
 python -m venv .venv
 source .venv/bin/activate        # Mac/Linux
 .venv\Scripts\activate           # Windows
 pip install -r requirements.txt
 ```
-
 
 **Los datos no están en el repositorio** y no deben estarlo: `.gitignore` los
 excluye. Declara aquí de dónde salen.
@@ -90,7 +124,7 @@ excluye. Declara aquí de dónde salen.
 | `requirements.txt` | Paquetes de Python necesarios para reproducir el análisis |
 | `README.md` | Descripción del proyecto y esta guía |
 
-## Bitácora de decisiones
+## Bitácora de decisiones 📖
 
 Cada vez que tomes una decisión de análisis —un umbral, un método, un filtro—
 anótala aquí con su razón. **La tabla de decisiones es el criterio A3 de la
@@ -110,5 +144,5 @@ rúbrica** (15 %), y llenarla al final, de memoria, se nota.
 
 
 
-## Referencias usadas:
+## Referencias usadas 📑 :
 - Luecken MD, Theis FJ. Current best practices in single-cell RNA-seq analysis: a tutorial. Mol Syst Biol. 2019 Jun 19;15(6):e8746. doi: 10.15252/msb.20188746. PMID: 31217225; PMCID: PMC6582955.
