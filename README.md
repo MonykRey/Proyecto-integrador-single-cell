@@ -94,7 +94,7 @@ Esto genera `reporte.html`. Hazlo desde la terminal con `sc-equipoC` activo, por
 ### Salidas
 - Las figuras se guardan automáticamente en `figuras/`.
 - Los resultados numéricos se imprimen en la terminal de Visual Studio Code.
-- Los objetos intermedios (`.h5ad`) se guardan en `data/`, que no se versiona.
+- Los objetos intermedios (`.h5ad`) se guardan en `data/`.
 
 ### Otra forma de instalar las dependencias (sin conda)
 Se puede crear un **entorno virtual** `.venv`:
@@ -117,12 +117,12 @@ excluye. Declara aquí de dónde salen.
 
 | Carpeta o archivo | Qué va aquí |
 |---|---|
-| `reporte.qmd` | El reporte ejecutable (Quarto + Python). El entregable |
+| `reporte.qmd` | El reporte ejecutable (Quarto + Python). |
 | `analisis_C_part3.py` | Script del análisis por celdas con todo el código completo del pipeline |
-| `data/` | Vacía a propósito:  Aquí se coloca la matriz 10x en `data/proyecto-equipo-C/` (`matrix.mtx`, `genes.tsv`, `barcodes.tsv`) y se guardan los objetos intermedios `.h5ad` |
+| `data/` | Vacía a propósito:  Aquí se coloca la matriz 10x (`matrix.mtx`, `genes.tsv`, `barcodes.tsv`) y se guardan los objetos intermedios `.h5ad` |
 | `figuras/` | Salida del reporte y del script. |
 | `requirements.txt` | Paquetes de Python necesarios para reproducir el análisis |
-| `README.md` | Descripción del proyecto y esta guía |
+| `README.md` | Descripción del proyecto |
 
 ## Bitácora de decisiones 📖
 
