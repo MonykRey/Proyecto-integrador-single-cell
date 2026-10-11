@@ -180,7 +180,7 @@ plt.show()
 
 ## 2. Control de calidad
 
-Los datos llegaron como una matriz con 38,606 genes y 928,681 barcodes, donde casí todos los barcodes son gotas vacías. Entoces por esta razón el control de calidad se hizo en tres pasos, aquí no intentamos definir un umbral basandonos en la literatura, sino que lo que queriamos era siempre ver la distribución de los datos antes de fijar un umbral. 
+Los datos llegaron como una matriz con 38,606 genes y 927,681 barcodes, donde casí todos los barcodes son gotas vacías. Entoces por esta razón el control de calidad se hizo en tres pasos, aquí no intentamos definir un umbral basandonos en la literatura, sino que lo que queriamos era siempre ver la distribución de los datos antes de fijar un umbral. 
 
 ### Umbral de cuentas totales.
 
@@ -348,7 +348,7 @@ guardar(fig, "08_scrublet")
 
 ## 3. Normalización y selección de genes
 
-Las 3,749 células tenian tamaños de bibiloteca muy distintos (iban de 2,679 a 29,317 cuentas), lo que podía interpretarse como diferencias en la secuenciación y no precisamente en la biología de los datos. Por so escalamos cada célula a 10,000 cuentas totales y aplicamos log1o, que reduce el peso de los valores extremos. En este caso nos quedamos con un valor de 10, 000 por que era el que quedaba cerca de la mediana de nuestros datos, este valor tambien fue consultado en la bibliografía y parece ser un valor estandar, además de que no distorsiona las cuentas de la mayor parte de las células.
+Las 3,749 células tenian tamaños de bibiloteca muy distintos (iban de 2,679 a 29,371 cuentas), lo que podía interpretarse como diferencias en la secuenciación y no precisamente en la biología de los datos. Por so escalamos cada célula a 10,000 cuentas totales y aplicamos log1o, que reduce el peso de los valores extremos. En este caso nos quedamos con un valor de 10, 000 por que era el que quedaba cerca de la mediana de nuestros datos, este valor tambien fue consultado en la bibliografía y parece ser un valor estandar, además de que no distorsiona las cuentas de la mayor parte de las células.
 
 
 ```{python}
@@ -432,8 +432,7 @@ guardar(fig, "10_pca_codo")
 
 ### ¿Algún PC refleja técnica y no biología?
 
-Correlacionamos los primeros 10 PCs con cuentas totales, % mitocondrial y puntaje
-de doblete, para ver si alguno de ellos captura variación técnica y no biológica.
+Correlacionamos los primeros 10 PCs con cuentas totales, % mitocondrial y puntaje de doblete, para ver si alguno de ellos captura variación técnica y no biológica.
 
 ```{python}
 #| label: pcs-tecnica
@@ -443,22 +442,11 @@ for cov in ["total_counts", "pct_counts_mt", "doublet_score"]:
     print(f"{cov:15s} correlación con PC1-PC10:", np.round(r, 2))
 ```
 
-Ningún PC muestra una correlación fuerte con las covariables técnicas (la más alta
-es 0.39). Las cuentas totales correlacionan moderadamente con PC1 (0.39), PC6
-(0.37) y PC10 (-0.32), y el % mitocondrial con PC1 (0.34) y PC9 (0.31). El puntaje
-de doblete tiene correlaciones bajas con todos los PCs (|r| ≤ 0.18). Como con
-r = 0.39 solo ~15 % de la variación de PC1 se asocia linealmente con las cuentas
-totales, y los tipos celulares también difieren en su contenido de RNA, no
-interpretamos esto como un efecto técnico dominante. Por eso conservamos todos los
-PCs y no regresamos ninguna covariable; en la sección de agrupamiento revisamos si
-algún grupo se explica por cuentas, % mt o dobletes.
+Ningún PC muestra una correlación fuerte con las covariables técnicas (la más alta es 0.39). Las cuentas totales correlacionan moderadamente con PC1 (0.39), PC6 (0.37) y PC10 (-0.32), y el % mitocondrial con PC1 (0.34) y PC9 (0.31). El puntaje de doblete tiene correlaciones bajas con todos los PCs (|r| ≤ 0.18). Como con r = 0.39 solo ~15 % de la variación de PC1 se asocia linealmente con las cuentas totales, y los tipos celulares también difieren en su contenido de RNA, no interpretamos esto como un efecto técnico dominante. Por eso conservamos todos los PCs y no regresamos ninguna covariable; en la sección de agrupamiento revisamos si algún grupo se explica por cuentas, % mt o dobletes.
 
 ### Sensibilidad: número de PCs y resolución
 
-Antes de fijar el agrupamiento probamos qué tanto cambian los grupos al variar el
-número de PCs y la resolución de Leiden. Para el número de PCs usamos el ARI
-(índice de Rand ajustado) contra una referencia con 20 PCs; para la resolución
-revisamos el número de grupos, el tamaño del grupo más chico y la silueta.
+Antes de fijar el agrupamiento probamos qué tanto cambian los grupos al variar el número de PCs y la resolución de Leiden. Para el número de PCs usamos el ARI (índice de Rand ajustado) contra una referencia con 20 PCs; para la resolución revisamos el número de grupos, el tamaño del grupo más chico y la silueta.
 
 ```{python}
 #| label: sensibilidad
@@ -488,18 +476,9 @@ for r in [0.2, 0.5, 0.8, 1.0, 1.5]:
 print(pd.DataFrame(filas).to_string(index=False))
 ```
 
-Con resolución 0.5, el agrupamiento es estable respecto al número de PCs: con 15,
-30 y 40 PCs el ARI contra la referencia (20 PCs) es de 0.975, 0.945 y 0.951, y el
-número de grupos se mantiene entre 11 y 12. Con 10 PCs el ARI baja a 0.888 y se
-pierde un grupo, lo que sugiere que 10 PCs ya no capturan toda la estructura.
-Elegimos 20 PCs porque coincide con el segundo quiebre del codo y queda dentro de
-la zona estable.
+Con resolución 0.5, el agrupamiento es estable respecto al número de PCs: con 15, 30 y 40 PCs el ARI contra la referencia (20 PCs) es de 0.975, 0.945 y 0.951, y el número de grupos se mantiene entre 11 y 12. Con 10 PCs el ARI baja a 0.888 y se pierde un grupo, lo que sugiere que 10 PCs ya no capturan toda la estructura. 
 
-Para la resolución, 0.5 tiene la silueta más alta (0.355) y su grupo más chico
-tiene 28 células. A partir de 0.8 la silueta cae a 0.235 y aparecen grupos de 15
-células, y con 1.5 se llega a 20 grupos con silueta de 0.181, lo que indica
-sobre-fragmentación. Con 0.2 hay 9 grupos y una silueta similar (0.351), pero
-fusiona dos grupos más que 0.5. Elegimos resolución 0.5 y 15 vecinos.
+Elegimos 20 PCs porque coincide con el segundo quiebre del codo y queda dentro de la zona estable. Para la resolución, 0.5 tiene la silueta más alta (0.355) y su grupo más chico tiene 28 células. A partir de 0.8 la silueta cae a 0.235 y aparecen grupos de 15 células, y con 1.5 se llega a 20 grupos con silueta de 0.181, lo que indica sobre-fragmentación. Con 0.2 hay 9 grupos y una silueta similar (0.351), pero fusiona dos grupos más que 0.5. Elegimos resolución 0.5 y 15 vecinos.
 
 ### Agrupamiento final y UMAP
 
@@ -524,38 +503,13 @@ print(adata_pca.obs.groupby("grupos", observed=True)
       .median().round(2).to_string())
 ```
 
-Con 20 PCs, 15 vecinos y resolución 0.5 obtuvimos 11 grupos de entre 28 y 1,059
-células. Ningún grupo se explica por técnica: las medianas de % mitocondrial van
-de 3.57 a 5.91 %, todas por debajo del corte de 8.65 %; las medianas de doblete
-van de 0.01 a 0.07, lejos del umbral de 0.366; y ningún grupo tiene cuentas
-bajas (la mediana más baja es 6,241). Los grupos 9 y 10 (28 y 49 células)
-destacan por tener muchas más cuentas (14,646 y 19,508) y genes detectados
-(4,458 y 5,175) que el resto, además de los puntajes de doblete más altos (0.06
-y 0.07). Con estas covariables no se puede distinguir si son dobletes o un tipo
-celular con más RNA, por lo que los conservamos y los revisamos con los
-marcadores.
+Con 20 PCs, 15 vecinos y resolución 0.5 obtuvimos 11 grupos de entre 28 y 1,059 células. Ningún grupo se explica por técnica: las medianas de % mitocondrial van de 3.57 a 5.91 %, todas por debajo del corte de 8.65 %; las medianas de doblete van de 0.01 a 0.07, lejos del umbral de 0.366; y ningún grupo tiene cuentas bajas (la mediana más baja es 6,241). Los grupos 9 y 10 (28 y 49 células) destacan por tener muchas más cuentas (14,646 y 19,508) y genes detectados (4,458 y 5,175) que el resto, además de los puntajes de doblete más altos (0.06 y 0.07). Con estas covariables no se puede distinguir si son dobletes o un tipo celular con más RNA, por lo que los conservamos y los revisamos con los marcadores.
 
 ## 5. Lo que encontraron
 
-Los 11 grupos corresponden a los tipos celulares esperados en sangre periférica.
-Los linfocitos T son la mayoría (2,326 células, 62 %): dos grupos T CD4 (0 y 2;
-el 2 con LEF1 y CCR7 alto, perfil naive, y el 0 con INPP4B y RORA, perfil de
-memoria), dos grupos T CD8 (1 y 3; el 1 con CCL5 y GZMK, efectoras/memoria, y el
-3 con CD8B y LEF1, naive) y un grupo MAIT (8, con KLRB1 y SLC4A10). Los
-monocitos clásicos (grupo 4, 673 células) expresan CD14, LYZ, S100A8 y VCAN, y
-las células B (grupos 5 y 6, 506 células) expresan MS4A1, CD79A y BANK1. El
-grupo 7 (158 células) son NK (NKG7, GNLY, KLRF1, PRF1). Los grupos 9 y 10 son
-los más pequeños: monocitos no clásicos (28 células; FCGR3A, MS4A7, TCF7L2) y
-células dendríticas (49 células; FCER1A, CLEC10A, CD1C).
+Los 11 grupos corresponden a los tipos celulares esperados en sangre periférica.Los linfocitos T son la mayoría (2,326 células, 62 %): dos grupos T CD4 (0 y 2; el 2 con LEF1 y CCR7 alto, perfil naive, y el 0 con INPP4B y RORA, perfil de memoria), dos grupos T CD8 (1 y 3; el 1 con CCL5 y GZMK, efectoras/memoria, y el 3 con CD8B y LEF1, naive) y un grupo MAIT (8, con KLRB1 y SLC4A10). Los monocitos clásicos (grupo 4, 673 células) expresan CD14, LYZ, S100A8 y VCAN, y las células B (grupos 5 y 6, 506 células) expresan MS4A1, CD79A y BANK1. El grupo 7 (158 células) son NK (NKG7, GNLY, KLRF1, PRF1). Los grupos 9 y 10 son los más pequeños: monocitos no clásicos (28 células; FCGR3A, MS4A7, TCF7L2) y células dendríticas (49 células; FCER1A, CLEC10A, CD1C).
 
-Los grupos 9 y 10 tenían más cuentas y genes detectados y los puntajes de
-doblete más altos, pero no son dobletes: no coexpresan marcadores de linajes
-distintos (CD3E y MS4A1 casi no se expresan), Scrublet no predijo ningún
-doblete en ellos y quedan junto a los monocitos en el UMAP. Su mayor contenido de
-RNA es consistente con que son células más grandes. Scrublet predijo 26 dobletes
-en total (0.7 %), 22 de ellos en los grupos 4, 5 y 6, por lo que no afectan la
-estructura de los grupos. No pudimos distinguir con este panel los dos grupos de
-células B (5 y 6).
+Los grupos 9 y 10 tenían más cuentas y genes detectados y los puntajes de doblete más altos, pero no son dobletes: no coexpresan marcadores de linajes distintos (CD3E y MS4A1 casi no se expresan), Scrublet no predijo ningún doblete en ellos y quedan junto a los monocitos en el UMAP. Su mayor contenido de RNA es consistente con que son células más grandes. Scrublet predijo 26 dobletes en total (0.7 %), 22 de ellos en los grupos 4, 5 y 6, por lo que no afectan la estructura de los grupos. No pudimos distinguir con este panel los dos grupos de células B (5 y 6).
 
 ### Genes marcadores por grupo
 
