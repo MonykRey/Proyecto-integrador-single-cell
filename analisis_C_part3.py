@@ -1,5 +1,5 @@
 # %% Rutas (único lugar donde se declaran)
-RUTA_DATOS = "/Users/monicareyes/Desktop/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
+RUTA_DATOS = "data/proyecto-equipo-C"   # matrix.mtx, genes.tsv, barcodes.tsv
 
 # %% Semilla y paquetes
 # --- Librerías estándar ---
