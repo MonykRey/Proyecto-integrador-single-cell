@@ -20,7 +20,7 @@ bonito, sino que corra en otra máquina sin intervención manual.
 El análisis está pensado para correrse **de preferencia en una computadora personal con Visual Studio Code**, no en el clúster.
 
 ```bash
-git clone <url-del-repositorio>
+git clone https://github.com/MonykRey/Proyecto-integrador-single-cell/blob/master/README.md
 cd Proyecto-integrador-single-cell
 ```
 
