@@ -79,14 +79,16 @@ excluye. Declara aquí de dónde salen.
 |---|---|---|
 | | `/ruta/en/el/cluster` | |
 
-## Estructura
+## Estructura 🌳
 
-| Carpeta | Qué va aquí |
+| Carpeta o archivo | Qué va aquí |
 |---|---|
-| `reporte.qmd` | El reporte ejecutable. Es el entregable |
-| `R/` | Funciones que uses en más de un lugar |
-| `datos/` | Vacía a propósito: los datos no se versionan |
-| `figuras/` | Salida del reporte. Tampoco se versiona |
+| `reporte.qmd` | El reporte ejecutable (Quarto + Python). El entregable |
+| `analisis_C_part3.py` | Script del análisis por celdas con todo el código completo del pipeline |
+| `data/` | Vacía a propósito:  Aquí se coloca la matriz 10x en `data/proyecto-equipo-C/` (`matrix.mtx`, `genes.tsv`, `barcodes.tsv`) y se guardan los objetos intermedios `.h5ad` |
+| `figuras/` | Salida del reporte y del script. |
+| `requirements.txt` | Paquetes de Python necesarios para reproducir el análisis |
+| `README.md` | Descripción del proyecto y esta guía |
 
 ## Bitácora de decisiones
 
